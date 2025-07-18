@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Gym Progress Tracker{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="fas fa-chart-line me-2"></i>Workout Dashboard</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-download me-1"></i>Export Data
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">Total Workouts</div>
+                        <div class="h5 mb-0 font-weight-bold">{{ total_workouts }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-calendar fa-2x text-white-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">Total Volume</div>
+                        <div class="h5 mb-0 font-weight-bold">{{ total_volume }} lbs×reps</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-weight-hanging fa-2x text-white-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">Date Range</div>
+                        <div class="h6 mb-0 font-weight-bold">{{ date_range }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-clock fa-2x text-white-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">Top Exercise</div>
+                        <div class="h6 mb-0 font-weight-bold">
+                            {% for exercise, count in top_exercises.items() %}
+                                {% if loop.first %}{{ exercise }}{% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-trophy fa-2x text-white-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row">
+    <div class="col-xl-8 col-lg-7">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-chart-area me-2"></i>Training Volume Trends</h6>
+            </div>
+            <div class="card-body">
+                <div id="volumeChart"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4 col-lg-5">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-chart-pie me-2"></i>Volume by Muscle Group</h6>
+            </div>
+            <div class="card-body">
+                <div id="muscleGroupChart"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Second Charts Row -->
+<div class="row">
+    <div class="col-xl-8 col-lg-7">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-chart-bar me-2"></i>Weekly Workout Frequency</h6>
+            </div>
+            <div class="card-body">
+                <div id="frequencyChart"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4 col-lg-5">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-list me-2"></i>Top Exercises</h6>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    {% for exercise, count in top_exercises.items() %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ exercise }}</strong>
+                            <br><small class="text-muted">{{ count }} sets</small>
+                        </div>
+                        <span class="badge bg-primary rounded-pill">{{ count }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Render volume chart
+    var volumeData = {{ volume_chart|safe }};
+    Plotly.newPlot('volumeChart', volumeData.data, volumeData.layout, {responsive: true});
+
+    // Render muscle group chart
+    var muscleGroupData = {{ muscle_group_chart|safe }};
+    Plotly.newPlot('muscleGroupChart', muscleGroupData.data, muscleGroupData.layout, {responsive: true});
+
+    // Render frequency chart
+    var frequencyData = {{ frequency_chart|safe }};
+    Plotly.newPlot('frequencyChart', frequencyData.data, frequencyData.layout, {responsive: true});
+</script>
+{% endblock %}

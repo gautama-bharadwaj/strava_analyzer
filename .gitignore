@@ -23,7 +23,7 @@ gym_workout_data.csv
 *.gif
 *.bmp
 *.svg
-!icon.svg
+!stravadash/static/*.svg
 
 # Python cache and compiled files
 __pycache__/

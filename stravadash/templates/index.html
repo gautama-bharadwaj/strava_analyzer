@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Training Dashboard</title>
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='logo.svg') }}">
 <script src="{{ url_for('static', filename='chart.umd.js') }}"></script>
 <style>
 :root {
@@ -39,6 +40,7 @@ body { margin: 0; background: var(--bg); color: var(--text);
 header { padding: 20px 16px 0; max-width: 1180px; margin: 0 auto; }
 h1 { font-size: 22px; margin: 0; }
 .sub { color: var(--text-2); font-size: 13px; }
+h1.brand { display: flex; align-items: center; gap: 10px; }
 .toprow { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .seg button { background: var(--surface); color: var(--text-2); border: 0; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
@@ -91,7 +93,7 @@ input[type=search] { width: 100%; padding: 8px 10px; border: 1px solid var(--bor
 </head>
 <body>
 <header>
-  <div class="toprow"><h1>Training Dashboard</h1>
+  <div class="toprow"><h1 class="brand"><img src="{{ url_for('static', filename='logo.svg') }}" alt="" width="32" height="32">Training Dashboard</h1>
     <div class="seg" role="group" aria-label="Distance units"><button data-u="imperial">mi</button><button data-u="metric">km</button></div></div>
   <div class="sub" id="subtitle"></div>
   <nav role="tablist">

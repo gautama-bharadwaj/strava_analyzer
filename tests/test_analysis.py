@@ -97,3 +97,14 @@ def test_other_sports(demo):
     assert not labels & {"Running", "Run", "Hike", "Weight training"}
     tennis = next(s for s in o["sports"] if s["label"] == "Tennis")
     assert tennis["dist"] is None and tennis["count"] == sum(y["count"] for y in tennis["yearly"])
+
+
+def test_redact_removes_names_and_heart_rate(tmp_path):
+    import json
+    store = Store(tmp_path / "db.sqlite")
+    populate(store, today=TODAY)
+    data = analysis.redact(analysis.build(store.conn, today=TODAY))
+    text = json.dumps(data, default=str)
+    for place in ("Mission Peak", "Mt Tam", "Bay trail", "Tahoe", "Morning Run"):
+        assert place not in text
+    assert all(r["hr"] is None for r in data["runs"]["runs"])

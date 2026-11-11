@@ -407,6 +407,23 @@ def highlights(data: dict, units: Units) -> list[dict]:
     return out
 
 
+def redact(data: dict) -> dict:
+    """Strip what could identify places or health details before publishing.
+
+    Activity titles often name the trail or neighbourhood ("Mission Peak"),
+    so they become generic labels; heart rate is removed. Nothing else in the
+    output carries GPS, times of day or account details.
+    """
+    for r in data["runs"].get("runs", []):
+        r["name"], r["hr"] = "Run", None
+    for i, h in enumerate(data["hikes"].get("biggest", []), 1):
+        h["name"] = f"Hike #{i}"
+    for s in data["other"].get("sports", []):
+        s["longest"]["name"] = s["label"]
+    data["public"] = True
+    return data
+
+
 def build(conn: sqlite3.Connection, today: date | None = None, system: str = "imperial",
           weekly_target: int = 3, weeks: int = 26) -> dict:
     today = today or date.today()

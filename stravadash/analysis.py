@@ -56,7 +56,7 @@ def epley_1rm(weight: float, reps: int) -> float:
 def load_activities(conn: sqlite3.Connection) -> pd.DataFrame:
     df = pd.read_sql_query(
         "SELECT id, name, sport_type, start_date_local, distance_m, moving_time_s, elapsed_time_s, "
-        "elevation_gain_m, average_speed_mps, average_heartrate FROM activities",
+        "elevation_gain_m, average_speed_mps, average_heartrate, max_heartrate FROM activities",
         conn,
     )
     df["date"] = pd.to_datetime(df["start_date_local"].str[:19], errors="coerce")
@@ -292,9 +292,72 @@ def hike_stats(acts: pd.DataFrame, units: Units) -> dict:
     }
 
 
+# --- heart ------------------------------------------------------------------------
+
+CARDIO_GUIDELINE_MIN = 150  # WHO: at least 150 minutes of moderate activity a week
+
+
+def heart_stats(acts: pd.DataFrame, units: Units, today: date, weeks: int = 26) -> dict:
+    """Cardio fitness signals from the heart rate Strava records with each activity.
+
+    Strava's API doesn't expose resting heart rate, so the main signal is
+    heartbeats per mile/km on runs: the same distance costing fewer beats means
+    a stronger heart. Pace and average heart rate are reported alongside.
+    """
+    out: dict = {"guideline_min": CARDIO_GUIDELINE_MIN}
+
+    # Weekly cardio minutes (everything except strength sessions), with or without HR.
+    start = _week_start(today) - timedelta(weeks=weeks - 1)
+    week_index = [start + timedelta(weeks=i) for i in range(weeks)]
+    cardio = acts[~acts["sport_type"].isin(GYM_TYPES)].copy()
+    cardio["week"] = cardio["day"].map(_week_start)
+    mins = (cardio.groupby("week")["moving_time_s"].sum() / 60).reindex(week_index, fill_value=0)
+    out["weekly_cardio"] = {"weeks": [str(w) for w in week_index], "minutes": [round(float(m)) for m in mins]}
+    out["cardio_this_week"] = int(mins.iloc[-1])
+    out["weeks_meeting_guideline"] = int((mins.iloc[:-1] >= CARDIO_GUIDELINE_MIN).sum())
+
+    hr = acts[acts["average_heartrate"].notna() & (acts["average_heartrate"] > 0)].copy()
+    out["with_hr"] = int(len(hr))
+    if hr.empty:
+        return out
+
+    # Average / max HR by sport.
+    by_sport = []
+    for sport, g in hr.groupby("sport_type"):
+        by_sport.append({"label": sport_label(sport), "count": int(len(g)), "avg_hr": round(float(g["average_heartrate"].mean())),
+                         "max_hr": None if g["max_heartrate"].isna().all() else round(float(g["max_heartrate"].max()))})
+    out["by_sport"] = sorted(by_sport, key=lambda x: -x["count"])
+
+    # Runs: heartbeats per distance unit, monthly.
+    runs = hr[hr["sport_type"].isin(RUN_TYPES) & (hr["distance_m"] > 0) & (hr["moving_time_s"] > 0)].copy()
+    runs["dist"] = units.dist(runs["distance_m"])
+    runs = runs[runs["dist"] >= (1.0 if units.distance == "mi" else 1.6)]
+    if runs.empty:
+        return out
+    runs["beats_per"] = runs["average_heartrate"] * runs["moving_time_s"] / 60 / runs["dist"]
+    runs["pace_s"] = runs["moving_time_s"] / runs["dist"]
+    runs["month"] = runs["date"].dt.to_period("M").astype(str)
+    monthly = runs.groupby("month").agg(beats=("beats_per", "median"), hr=("average_heartrate", "mean"),
+                                        pace=("pace_s", "median"), n=("id", "count"))
+    out["run_monthly"] = [{"month": m, "beats_per": round(float(r["beats"])), "avg_hr": round(float(r["hr"])),
+                           "pace_s": round(float(r["pace"])), "runs": int(r["n"])} for m, r in monthly.iterrows()]
+    recent = runs[runs["day"] > today - timedelta(days=90)]
+    earliest = runs.head(max(3, min(10, len(runs) // 4)))
+    out["run_recent"] = None if recent.empty else {
+        "beats_per": round(float(recent["beats_per"].median())), "avg_hr": round(float(recent["average_heartrate"].mean())),
+        "pace_s": round(float(recent["pace_s"].median())), "runs": int(len(recent))}
+    out["run_first"] = {"beats_per": round(float(earliest["beats_per"].median())),
+                        "avg_hr": round(float(earliest["average_heartrate"].mean())),
+                        "pace_s": round(float(earliest["pace_s"].median())), "since": str(earliest["day"].min())}
+    if out["run_recent"]:
+        out["beats_change_pct"] = _pct(out["run_recent"]["beats_per"], out["run_first"]["beats_per"])
+    return out
+
+
 # --- everything else ------------------------------------------------------------
 
-SPORT_NAMES = {"Ride": "Cycling", "VirtualRide": "Indoor cycling", "EBikeRide": "E-bike", "MountainBikeRide": "Mountain biking",
+SPORT_NAMES = {"Run": "Running", "TrailRun": "Trail running", "Hike": "Hiking", "WeightTraining": "Strength training",
+               "Workout": "Workout", "Ride": "Cycling", "VirtualRide": "Indoor cycling", "EBikeRide": "E-bike", "MountainBikeRide": "Mountain biking",
                "AlpineSki": "Skiing", "BackcountrySki": "Backcountry skiing", "NordicSki": "Cross-country skiing",
                "StandUpPaddling": "Stand-up paddling", "Swim": "Swimming", "Walk": "Walking", "Rowing": "Rowing",
                "Kayaking": "Kayaking", "RockClimbing": "Climbing", "Snowboard": "Snowboarding", "Yoga": "Yoga"}
@@ -399,6 +462,11 @@ def highlights(data: dict, units: Units) -> list[dict]:
         cur, chg = ytd["current"][key], ytd["change_pct"][key]
         if cur and chg is not None and chg > 0:
             out.append({"kind": "win", "text": f"{cur:,.0f} {label} this year, up {chg:g}% on where you were this time last year."})
+    h = data["heart"]
+    if h.get("beats_change_pct") is not None and h["beats_change_pct"] < 0:
+        out.append({"kind": "win", "text": f"Your heart is getting stronger: recent runs take {abs(h['beats_change_pct']):g}% fewer heartbeats per {units.distance} than your first ones."})
+    if h["cardio_this_week"] >= h["guideline_min"]:
+        out.append({"kind": "win", "text": f"{h['cardio_this_week']} cardio minutes this week, past the {h['guideline_min']}-minute guideline."})
     improving = [e for e in data["exercises"] if e.get("change_pct") and e["change_pct"] > 0]
     improving.sort(key=lambda e: -e["change_pct"])
     if improving:
@@ -411,11 +479,11 @@ def redact(data: dict) -> dict:
     """Strip what could identify places or health details before publishing.
 
     Activity titles often name the trail or neighbourhood ("Mission Peak"),
-    so they become generic labels; heart rate is removed. Nothing else in the
-    output carries GPS, times of day or account details.
+    so they become generic labels. Nothing else in the output carries GPS,
+    times of day or account details. (Heart rate is kept: GB is happy to share it.)
     """
     for r in data["runs"].get("runs", []):
-        r["name"], r["hr"] = "Run", None
+        r["name"] = "Run"
     for i, h in enumerate(data["hikes"].get("biggest", []), 1):
         h["name"] = f"Hike #{i}"
     for s in data["other"].get("sports", []):
@@ -446,6 +514,7 @@ def build(conn: sqlite3.Connection, today: date | None = None, system: str = "im
         "runs": run_stats(acts, units, today),
         "hikes": hike_stats(acts, units),
         "other": other_sports(acts, units),
+        "heart": heart_stats(acts, units, today),
         "compare": comparisons(acts, sets, units, today),
     }
     data["highlights"] = highlights(data, units)

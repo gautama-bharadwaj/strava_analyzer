@@ -99,7 +99,7 @@ def test_other_sports(demo):
     assert tennis["dist"] is None and tennis["count"] == sum(y["count"] for y in tennis["yearly"])
 
 
-def test_redact_removes_names_and_heart_rate(tmp_path):
+def test_redact_removes_names_keeps_heart_rate(tmp_path):
     import json
     store = Store(tmp_path / "db.sqlite")
     populate(store, today=TODAY)
@@ -107,4 +107,27 @@ def test_redact_removes_names_and_heart_rate(tmp_path):
     text = json.dumps(data, default=str)
     for place in ("Mission Peak", "Mt Tam", "Bay trail", "Tahoe", "Morning Run"):
         assert place not in text
-    assert all(r["hr"] is None for r in data["runs"]["runs"])
+    assert any(r["hr"] for r in data["runs"]["runs"])
+
+
+def test_heart_stats(tmp_path):
+    store = Store(tmp_path / "db.sqlite")
+    with store.transaction():
+        # Same 5 km at the same pace; heart rate drops from 170 to 150 over the year.
+        for i, (day, hr) in enumerate([("2026-01-05", 170), ("2026-01-12", 168), ("2026-01-19", 169),
+                                        ("2026-10-20", 152), ("2026-11-03", 150), ("2026-11-09", 151)], 1):
+            store.upsert_summary({"id": i, "name": "Run", "sport_type": "Run", "start_date": f"{day}T07:00:00Z",
+                                  "start_date_local": f"{day}T07:00:00Z", "distance": 5000, "moving_time": 1800,
+                                  "average_heartrate": hr, "max_heartrate": hr + 15})
+    h = analysis.build(store.conn, today=TODAY, system="metric")["heart"]
+    assert h["with_hr"] == 6
+    assert h["run_first"]["beats_per"] == 1014  # 169 bpm * 6 min/km
+    assert h["run_recent"]["beats_per"] == 906
+    assert h["beats_change_pct"] < -10
+    assert h["weekly_cardio"]["minutes"][-1] == 30  # this week's run
+    assert h["by_sport"][0] == {"label": "Running", "count": 6, "avg_hr": 160, "max_hr": 185}
+
+
+def test_heart_without_hr(tmp_path):
+    h = analysis.build(Store(tmp_path / "db.sqlite").conn, today=TODAY)["heart"]
+    assert h["with_hr"] == 0 and "run_monthly" not in h

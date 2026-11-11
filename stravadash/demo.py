@@ -71,7 +71,8 @@ def populate(store: Store, today: date | None = None, seed: int = 7) -> int:
                                       "start_date": when.isoformat() + "Z", "start_date_local": when.isoformat() + "Z",
                                       "distance": km * 1000, "moving_time": int(km * pace), "elapsed_time": int(km * pace) + 60,
                                       "total_elevation_gain": rng.uniform(10, 80), "average_speed": 1000 / pace,
-                                      "average_heartrate": rng.uniform(145, 165)})
+                                      "average_heartrate": 162 - 10 * progress + rng.uniform(-5, 5),
+                                      "max_heartrate": 182 - 6 * progress + rng.uniform(-4, 4)})
                 aid += 1
                 n += 1
             if d.weekday() >= 5 and rng.random() < 0.3:
@@ -81,7 +82,8 @@ def populate(store: Store, today: date | None = None, seed: int = 7) -> int:
                                       "sport_type": "Hike", "start_date": when.isoformat() + "Z",
                                       "start_date_local": when.isoformat() + "Z", "distance": km * 1000,
                                       "moving_time": int(km * 900), "elapsed_time": int(km * 1100),
-                                      "total_elevation_gain": km * rng.uniform(40, 110)})
+                                      "total_elevation_gain": km * rng.uniform(40, 110),
+                                      "average_heartrate": rng.uniform(118, 138), "max_heartrate": rng.uniform(150, 170)})
                 aid += 1
                 n += 1
             if rng.random() < 0.06:

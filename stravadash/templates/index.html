@@ -101,6 +101,7 @@ input[type=search] { width: 100%; padding: 8px 10px; border: 1px solid var(--bor
     <button role="tab" data-tab="gym">Gym</button>
     <button role="tab" data-tab="running">Running</button>
     <button role="tab" data-tab="hiking">Hiking</button>
+    <button role="tab" data-tab="heart">Heart</button>
     <button role="tab" data-tab="other">Other activities</button>
   </nav>
 </header>
@@ -145,6 +146,18 @@ input[type=search] { width: 100%; padding: 8px 10px; border: 1px solid var(--bor
       <div class="card"><h2>Biggest climbs</h2><p class="note">Top 5 hikes by elevation gain</p><div class="scroll"><table id="hikeTop"></table></div></div>
     </div>
   </section>
+  <section class="tab" id="heart">
+    <div class="grid kpis" id="heartKpis"></div>
+    <div class="grid two" style="margin-top:14px">
+      <div class="card"><h2>Heartbeats per <span class="u-dist"></span> on runs</h2><p class="note">Monthly median · lower means your heart does the same work with fewer beats</p><div class="chart"><canvas id="beatsChart"></canvas></div></div>
+      <div class="card"><h2>Average heart rate on runs</h2><p class="note">Monthly average, bpm · read it together with pace in the tooltip</p><div class="chart"><canvas id="hrChart"></canvas></div></div>
+    </div>
+    <div class="grid two" style="margin-top:14px">
+      <div class="card"><h2>Cardio minutes per week</h2><p class="note">Everything except strength sessions · dashed line is the 150-minute weekly guideline</p><div class="chart"><canvas id="cardioChart"></canvas></div></div>
+      <div class="card"><h2>Heart rate by activity</h2><p class="note">Activities recorded with a heart rate monitor</p><div class="scroll"><table id="hrTable"></table></div></div>
+    </div>
+  </section>
+
   <section class="tab" id="other">
     <div class="grid kpis" id="otherKpis"></div>
     <div class="grid two" style="margin-top:14px">
@@ -330,7 +343,7 @@ async function showExercise(name) {
     type: "line",
     data: { labels: h.map(x => x.day), datasets: [{ label: weighted ? "Est. 1RM" : "Total",
       data: h.map(x => weighted ? x.e1rm : (x.duration_s ?? x.reps)), borderColor: css("--s1"), backgroundColor: css("--s1"),
-      borderWidth: 2, pointRadius: h.length > 60 ? 0 : 3, pointHoverRadius: 5, tension: 0.25 }] },
+      borderWidth: 2, pointRadius: h.length > 60 ? 0 : 3, pointHoverRadius: 5, cubicInterpolationMode: "monotone" }] },
     options: { interaction: { mode: "index", intersect: false },
       scales: { ...axes(weighted ? r.unit : "", { beginAtZero: false }), x: { type: "category", grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 20, callback(v) { return new Date(this.getLabelForValue(v) + "T00:00").toLocaleDateString(undefined, { month: "short", year: "2-digit" }); } } } },
       plugins: { tooltip: { callbacks: { title: i => shortDate(i[0].label),
@@ -389,6 +402,51 @@ document.getElementById("prTable").innerHTML = D.recent_prs.length
   });
   document.getElementById("hikeTop").innerHTML = `<thead><tr><th>Date</th><th>Hike</th><th class="num">${U.distance}</th><th class="num">${U.elevation}</th></tr></thead><tbody>` +
     h.biggest.map(x => `<tr><td>${new Date(x.day + "T00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</td><td>${esc(x.name)}</td><td class="num">${fmt(x.dist, 1)}</td><td class="num">${fmt(x.elev)}</td></tr>`).join("") + "</tbody>";
+})();
+
+// ---------- Heart ----------
+(function () {
+  const h = D.heart;
+  document.querySelectorAll(".u-dist").forEach(e => e.textContent = U.distance);
+  const g = h.guideline_min, cw = h.cardio_this_week;
+  const tiles = [];
+  if (h.run_recent) {
+    tiles.push(kpi(`Heartbeats per ${U.distance}`, fmt(h.run_recent.beats_per), "", `${delta(h.beats_change_pct, true).replace("no data last year", "")} <span class="delta flat">vs your first runs (${fmt(h.run_first.beats_per)})</span>`));
+    tiles.push(kpi("Avg run heart rate", h.run_recent.avg_hr, "bpm", `<span class="delta flat">last 90 days · first runs ${h.run_first.avg_hr}</span>`));
+    tiles.push(kpi("Run pace", pace(h.run_recent.pace_s), "/" + U.distance, `<span class="delta flat">last 90 days · first runs ${pace(h.run_first.pace_s)}</span>`));
+  }
+  tiles.push(kpi("Cardio this week", cw, "min", cw >= g ? `<span class="delta up">✓ past ${g} min</span>` : `<span class="delta flat">${g - cw} min to go</span>`));
+  tiles.push(kpi(`Weeks at ${g}+ min`, h.weeks_meeting_guideline, `of ${h.weekly_cardio.weeks.length - 1}`, `<span class="delta flat">last 6 months</span>`));
+  document.getElementById("heartKpis").innerHTML = tiles.join("");
+
+  const m = h.run_monthly || [];
+  const lineOpts = (fmtY, unit) => ({
+    interaction: { mode: "index", intersect: false },
+    scales: { ...axes(unit, { beginAtZero: false }) },
+    plugins: { tooltip: { callbacks: { label: i => { const r = m[i.dataIndex];
+      return `${fmtY(i.raw)} · ${r.runs} runs · avg ${r.avg_hr} bpm at ${pace(r.pace_s)}/${U.distance}`; } } } },
+  });
+  const line = (id, values, fmtY, unit) => {
+    if (!m.length) { document.getElementById(id).parentElement.innerHTML = `<div class="empty">No runs with heart rate yet.</div>`; return; }
+    charts[id] = new Chart(document.getElementById(id), {
+      type: "line", data: { labels: m.map(x => x.month), datasets: [{ data: values, borderColor: css("--s1"), backgroundColor: css("--s1"),
+        borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, cubicInterpolationMode: "monotone" }] }, options: lineOpts(fmtY, unit) });
+  };
+  line("beatsChart", m.map(x => x.beats_per), v => `${fmt(v)} beats/${U.distance}`, "beats");
+  line("hrChart", m.map(x => x.avg_hr), v => `${v} bpm`, "bpm");
+
+  charts.cardio = new Chart(document.getElementById("cardioChart"), {
+    data: { labels: h.weekly_cardio.weeks.map(shortDate), datasets: [
+      { type: "bar", data: h.weekly_cardio.minutes, backgroundColor: css("--s1"), ...bar },
+      { type: "line", data: h.weekly_cardio.weeks.map(() => g), borderColor: css("--text-3"), borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, pointHitRadius: 0 },
+    ] },
+    options: { scales: axes("minutes"), plugins: { tooltip: { filter: i => i.datasetIndex === 0, callbacks: { title: i => "Week of " + i[0].label, label: i => `${i.raw} min` } } } },
+  });
+
+  document.getElementById("hrTable").innerHTML = (h.by_sport || []).length
+    ? `<thead><tr><th>Activity</th><th class="num">With HR</th><th class="num">Avg bpm</th><th class="num">Max bpm</th></tr></thead><tbody>` +
+      h.by_sport.map(x => `<tr><td>${esc(x.label)}</td><td class="num">${x.count}</td><td class="num">${x.avg_hr}</td><td class="num">${x.max_hr ?? "–"}</td></tr>`).join("") + "</tbody>"
+    : `<tbody><tr><td class="empty">No activities with heart rate yet.</td></tr></tbody>`;
 })();
 
 // ---------- Other activities ----------

@@ -5,8 +5,6 @@ workouts that Hevy posts to Strava. Gym sets (exercise, weight, reps) are read
 from the text Hevy writes into each activity's description, so no Hevy Pro
 subscription is needed.
 
-> Status: rebuild in progress. Step 1 (data pipeline) is done; the analysis
-> and the web dashboard come next.
 
 ## Setup
 
@@ -30,6 +28,7 @@ stravadash status     # counts by sport and parsed gym totals
 stravadash exercises  # parsed exercises, most frequent first
 stravadash unparsed   # gym sessions where no sets could be read
 stravadash reparse    # re-run the Hevy parser on stored data, no API calls
+stravadash serve      # dashboard at http://localhost:8050 (add --demo for sample data)
 ```
 
 (`python -m stravadash <command>` works too.)

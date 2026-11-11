@@ -37,8 +37,8 @@ def _main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("unparsed", help="show gym sessions whose description produced no sets")
 
-    p_serve = sub.add_parser("serve", help="open the dashboard at http://localhost:5000")
-    p_serve.add_argument("--port", type=int, default=5000)
+    p_serve = sub.add_parser("serve", help="open the dashboard at http://localhost:8050")
+    p_serve.add_argument("--port", type=int, default=8050)  # 5000 is taken by AirPlay on macOS
     p_serve.add_argument("--demo", action="store_true", help="use generated sample data instead of your own")
 
     args = parser.parse_args(argv)

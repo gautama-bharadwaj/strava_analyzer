@@ -18,6 +18,7 @@ gym_workout_data.csv
 
 # Generated images and charts
 *.png
+!docs/*.png
 *.jpg
 *.jpeg
 *.gif

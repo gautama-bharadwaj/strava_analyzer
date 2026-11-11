@@ -58,10 +58,21 @@ def _exchange(settings: Settings, **data: str) -> dict:
     return tokens
 
 
+def _bind(port: int) -> HTTPServer:
+    """Listen on `port`, or any free port if it's taken (Strava only checks the domain)."""
+    for candidate in (port, 0):
+        try:
+            return HTTPServer(("localhost", candidate), BaseHTTPRequestHandler)
+        except OSError:
+            continue
+    raise AuthError("Couldn't open a local port for the Strava login.")
+
+
 def authorize(settings: Settings, open_browser: bool = True) -> dict:
     """Run the browser OAuth flow and store tokens."""
     client_id, _ = settings.require_credentials()
-    redirect_uri = f"http://localhost:{settings.auth_port}/callback"
+    server = _bind(settings.auth_port)
+    redirect_uri = f"http://localhost:{server.server_address[1]}/callback"
     url = AUTHORIZE_URL + "?" + urlencode(
         {
             "client_id": client_id,
@@ -94,7 +105,7 @@ def authorize(settings: Settings, open_browser: bool = True) -> dict:
         def log_message(self, *args):  # keep the terminal quiet
             pass
 
-    server = HTTPServer(("localhost", settings.auth_port), Handler)
+    server.RequestHandlerClass = Handler
     print(f"Opening Strava to authorize. If the browser doesn't open, visit:\n  {url}")
     if open_browser:
         webbrowser.open(url)

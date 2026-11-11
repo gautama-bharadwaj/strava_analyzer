@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Training Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f3f0; --surface: #fcfcfb; --border: #e3e2dd;
+  --text: #0b0b0b; --text-2: #52514e; --text-3: #7a7974;
+  --grid: #ecebe7;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+  --good: #0ca30c; --good-text: #006300; --warn-text: #8a5a00; --bad-text: #b02a2a;
+  --heat0: #ecebe7; --heat1: #b7d3f6; --heat2: #6da7ec; --heat3: #2a78d6; --heat4: #184f95;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --surface: #1a1a19; --border: #2e2e2b;
+    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86; --grid: #2a2a27;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+    --good-text: #4fcf4f; --warn-text: #f0b542; --bad-text: #ef7b7b;
+    --heat0: #262624; --heat1: #104281; --heat2: #1c5cab; --heat3: #3987e5; --heat4: #86b6ef;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --surface: #1a1a19; --border: #2e2e2b;
+  --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86; --grid: #2a2a27;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+  --good-text: #4fcf4f; --warn-text: #f0b542; --bad-text: #ef7b7b;
+  --heat0: #262624; --heat1: #104281; --heat2: #1c5cab; --heat3: #3987e5; --heat4: #86b6ef;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { padding: 20px 16px 0; max-width: 1180px; margin: 0 auto; }
+h1 { font-size: 22px; margin: 0; }
+.sub { color: var(--text-2); font-size: 13px; }
+nav { display: flex; gap: 4px; margin-top: 14px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+nav button { background: none; border: 0; padding: 10px 14px; font: inherit; color: var(--text-2); cursor: pointer;
+  border-bottom: 2px solid transparent; }
+nav button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--s1); font-weight: 600; }
+main { max-width: 1180px; margin: 0 auto; padding: 16px; }
+section.tab { display: none; } section.tab.active { display: block; }
+.grid { display: grid; gap: 14px; }
+.kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.two { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
+.card h2 { font-size: 15px; margin: 0 0 2px; }
+.card .note { color: var(--text-3); font-size: 12px; margin: 0 0 12px; }
+.kpi .label { color: var(--text-2); font-size: 13px; }
+.kpi .value { font-size: 28px; font-weight: 650; font-variant-numeric: tabular-nums; margin: 2px 0; }
+.kpi .value small { font-size: 14px; font-weight: 500; color: var(--text-2); }
+.delta { font-size: 12px; font-variant-numeric: tabular-nums; }
+.up { color: var(--good-text); } .down { color: var(--bad-text); } .flat { color: var(--text-3); }
+ul.hl { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+ul.hl li { display: flex; gap: 10px; align-items: flex-start; }
+ul.hl .ic { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+ul.hl .win .ic { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good-text); }
+ul.hl .nudge .ic { background: color-mix(in srgb, #fab219 22%, transparent); color: var(--warn-text); }
+.chart { position: relative; height: 260px; }
+.chart.tall { height: 340px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { color: var(--text-2); font-weight: 500; font-size: 12px; position: sticky; top: 0; background: var(--surface); cursor: pointer; }
+td.num, th.num { text-align: right; }
+tbody tr.click { cursor: pointer; } tbody tr.click:hover, tbody tr.sel { background: color-mix(in srgb, var(--s1) 10%, transparent); }
+.scroll { overflow: auto; max-height: 460px; }
+.heat { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 12px); gap: 3px; overflow-x: auto; padding-bottom: 4px; }
+.heat div { width: 12px; height: 12px; border-radius: 2px; background: var(--heat0); }
+.legend-row { display: flex; gap: 4px; align-items: center; font-size: 12px; color: var(--text-3); margin-top: 8px; }
+.legend-row span.sw { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+.bars { display: grid; gap: 6px; }
+.bars .row { display: grid; grid-template-columns: 150px 1fr 48px; gap: 8px; align-items: center; font-size: 13px; }
+.bars .track { height: 10px; }
+.bars .fill { height: 10px; border-radius: 0 4px 4px 0; background: var(--s1); }
+input[type=search] { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; margin-bottom: 10px; }
+.empty { color: var(--text-3); padding: 24px 0; text-align: center; }
+#tip { position: fixed; pointer-events: none; background: var(--text); color: var(--surface); padding: 4px 8px; border-radius: 6px; font-size: 12px; display: none; z-index: 9; }
+@media (max-width: 520px) { .bars .row { grid-template-columns: 110px 1fr 40px; } .kpi .value { font-size: 24px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Training Dashboard</h1>
+  <div class="sub" id="subtitle"></div>
+  <nav role="tablist">
+    <button role="tab" data-tab="overview" aria-selected="true">Overview</button>
+    <button role="tab" data-tab="gym">Gym</button>
+    <button role="tab" data-tab="running">Running</button>
+    <button role="tab" data-tab="hiking">Hiking</button>
+  </nav>
+</header>
+<main>
+  <section class="tab active" id="overview">
+    <div class="grid kpis" id="kpis"></div>
+    <div class="grid two" style="margin-top:14px">
+      <div class="card"><h2>What's happening</h2><p class="note">Wins and nudges from your recent training</p><ul class="hl" id="highlights"></ul></div>
+      <div class="card"><h2>Gym sessions per week</h2><p class="note">Last 26 weeks · dashed line is your weekly target</p><div class="chart"><canvas id="weeklyChart"></canvas></div></div>
+    </div>
+    <div class="card" style="margin-top:14px"><h2>Every active day, past year</h2><p class="note">All sports · darker means more minutes moving</p><div class="heat" id="heat"></div>
+      <div class="legend-row">Less <span class="sw" style="background:var(--heat0)"></span><span class="sw" style="background:var(--heat1)"></span><span class="sw" style="background:var(--heat2)"></span><span class="sw" style="background:var(--heat3)"></span><span class="sw" style="background:var(--heat4)"></span> More</div></div>
+    <div class="card" style="margin-top:14px"><h2>This year vs. this point last year</h2><p class="note" id="yoyNote"></p><div class="scroll"><table id="yoy"></table></div></div>
+  </section>
+
+  <section class="tab" id="gym">
+    <div class="grid two">
+      <div class="card"><h2>Working sets per muscle group</h2><p class="note">Last 4 weeks, warm-ups excluded</p><div class="bars" id="groupSets"></div></div>
+      <div class="card"><h2>Days since you trained…</h2><p class="note">Longest gap first</p><div class="bars" id="groupDays"></div></div>
+    </div>
+    <div class="grid two" style="margin-top:14px">
+      <div class="card"><h2>Exercises</h2><p class="note">Click a row to see its progress · est. 1RM uses the Epley formula</p>
+        <input type="search" id="exSearch" placeholder="Filter exercises">
+        <div class="scroll"><table id="exTable"></table></div></div>
+      <div class="card"><h2 id="exTitle">Progress</h2><p class="note" id="exNote">Pick an exercise</p><div class="chart tall"><canvas id="exChart"></canvas></div></div>
+    </div>
+    <div class="card" style="margin-top:14px"><h2>Personal records, last 30 days</h2><p class="note">Sessions where an exercise beat its previous best estimated 1RM</p><div class="scroll"><table id="prTable"></table></div></div>
+  </section>
+
+  <section class="tab" id="running">
+    <div class="grid kpis" id="runKpis"></div>
+    <div class="grid two" style="margin-top:14px">
+      <div class="card"><h2>Distance per month</h2><p class="note" id="runDistNote"></p><div class="chart"><canvas id="runMonthly"></canvas></div></div>
+      <div class="card"><h2>Pace per run</h2><p class="note">Lower is faster · runs over 1 mile/1.6 km</p><div class="chart"><canvas id="runPace"></canvas></div></div>
+    </div>
+  </section>
+
+  <section class="tab" id="hiking">
+    <div class="grid kpis" id="hikeKpis"></div>
+    <div class="grid two" style="margin-top:14px">
+      <div class="card"><h2>Elevation climbed per year</h2><p class="note" id="hikeNote"></p><div class="chart"><canvas id="hikeYearly"></canvas></div></div>
+      <div class="card"><h2>Biggest climbs</h2><p class="note">Top 5 hikes by elevation gain</p><div class="scroll"><table id="hikeTop"></table></div></div>
+    </div>
+  </section>
+</main>
+<div id="tip"></div>
+<script>
+const D = {{ data_json | safe }};
+const U = D.units;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (n, d = 0) => n == null ? "–" : Number(n).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: 0 });
+const pace = s => s == null ? "–" : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const shortDate = s => new Date(s + "T00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+function delta(p, invert = false) {
+  if (p == null) return `<span class="delta flat">no data last year</span>`;
+  const good = invert ? p < 0 : p > 0;
+  const cls = p === 0 ? "flat" : good ? "up" : "down";
+  return `<span class="delta ${cls}">${p > 0 ? "▲" : p < 0 ? "▼" : "•"} ${fmt(Math.abs(p), 1)}%</span>`;
+}
+const kpi = (label, value, unit, extra = "") =>
+  `<div class="card kpi"><div class="label">${label}</div><div class="value">${value}${unit ? ` <small>${unit}</small>` : ""}</div>${extra}</div>`;
+
+document.getElementById("subtitle").textContent =
+  `${fmt(D.totals.activities)} activities since ${D.totals.first_day ?? "–"} · updated ${D.today}`;
+
+// Tabs
+const charts = {};
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
+  document.querySelectorAll("section.tab").forEach(s => s.classList.toggle("active", s.id === b.dataset.tab));
+  history.replaceState(null, "", "#" + b.dataset.tab);
+  Object.values(charts).forEach(c => c.resize());
+});
+if (location.hash) document.querySelector(`nav button[data-tab="${location.hash.slice(1)}"]`)?.click();
+
+// Chart.js defaults
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.color = css("--text-2");
+Chart.defaults.borderColor = css("--grid");
+Chart.defaults.plugins.legend.display = false;
+Chart.defaults.plugins.tooltip.backgroundColor = css("--text");
+Chart.defaults.plugins.tooltip.titleColor = css("--surface");
+Chart.defaults.plugins.tooltip.bodyColor = css("--surface");
+Chart.defaults.maintainAspectRatio = false;
+const bar = { borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: "bottom", maxBarThickness: 28 };
+const axes = (yTitle, extra = {}) => ({
+  x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 12 } },
+  y: { beginAtZero: true, title: { display: !!yTitle, text: yTitle }, ticks: { precision: 0 }, ...extra },
+});
+
+// ---------- Overview ----------
+const c = D.consistency, y = D.compare.year;
+document.getElementById("kpis").innerHTML = [
+  kpi("Gym this week", `${c.this_week}<small> / ${c.weekly_target}</small>`, "", c.this_week >= c.weekly_target ? `<span class="delta up">✓ target hit</span>` : `<span class="delta flat">${c.weekly_target - c.this_week} to go</span>`),
+  kpi("Weekly streak", c.current_streak_weeks, c.current_streak_weeks === 1 ? "week" : "weeks", `<span class="delta flat">best ${c.longest_streak_weeks}</span>`),
+  kpi("Since last gym day", c.days_since_gym ?? "–", c.days_since_gym === 1 ? "day" : "days"),
+  kpi("Gym sessions this year", fmt(y.current.gym_sessions), "", delta(y.change_pct.gym_sessions)),
+  kpi(`Run distance this year`, fmt(y.current.run_dist, 1), U.distance, delta(y.change_pct.run_dist)),
+  kpi(`Hiking climb this year`, fmt(y.current.hike_elev), U.elevation, delta(y.change_pct.hike_elev)),
+].join("");
+
+document.getElementById("highlights").innerHTML = D.highlights.length
+  ? D.highlights.map(h => `<li class="${h.kind}"><span class="ic" aria-label="${h.kind}">${h.kind === "win" ? "✓" : "!"}</span><span>${esc(h.text)}</span></li>`).join("")
+  : `<li class="empty">Sync some activities to see highlights.</li>`;
+
+charts.weekly = new Chart(document.getElementById("weeklyChart"), {
+  data: {
+    labels: D.weekly.weeks.map(shortDate),
+    datasets: [
+      { type: "bar", label: "Sessions", data: D.weekly.sessions, backgroundColor: css("--s1"), ...bar },
+      { type: "line", label: "Target", data: D.weekly.weeks.map(() => c.weekly_target), borderColor: css("--text-3"),
+        borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, pointHitRadius: 0 },
+    ],
+  },
+  options: { scales: axes("sessions"), plugins: { tooltip: { filter: i => i.datasetIndex === 0,
+    callbacks: { title: i => "Week of " + i[0].label } } } },
+});
+
+// Heatmap: 53 columns of weeks, Monday on top
+(function () {
+  const el = document.getElementById("heat"), tip = document.getElementById("tip");
+  const end = new Date(D.today + "T00:00"), start = new Date(end);
+  start.setDate(start.getDate() - 364 - ((start.getDay() + 6) % 7));
+  const vals = Object.values(c.heatmap).filter(v => v > 0).sort((a, b) => a - b);
+  const q = p => vals.length ? vals[Math.floor((vals.length - 1) * p)] : 1;
+  const cuts = [q(0.25), q(0.5), q(0.75)];
+  let html = "";
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const key = d.toISOString().slice(0, 10), m = c.heatmap[key];
+    const lvl = m == null ? 0 : m <= cuts[0] ? 1 : m <= cuts[1] ? 2 : m <= cuts[2] ? 3 : 4;
+    html += `<div data-k="${key}" data-m="${m ?? ""}" style="background:var(--heat${lvl})"></div>`;
+  }
+  el.innerHTML = html;
+  el.onmousemove = e => {
+    const k = e.target.dataset.k;
+    if (!k) return (tip.style.display = "none");
+    tip.textContent = `${shortDate(k)}: ${e.target.dataset.m ? e.target.dataset.m + " min" : "rest day"}`;
+    Object.assign(tip.style, { display: "block", left: e.clientX + 12 + "px", top: e.clientY + 12 + "px" });
+  };
+  el.onmouseleave = () => (tip.style.display = "none");
+})();
+
+(function () {
+  const rows = [["gym_sessions", "Gym sessions", 0], ["gym_sets", "Working sets", 0], ["gym_volume", `Volume lifted (${U.weight})`, 0],
+    ["run_dist", `Run distance (${U.distance})`, 1], ["hike_elev", `Hiking climb (${U.elevation})`, 0],
+    ["active_hours", "Hours moving", 1], ["active_days", "Active days", 0]];
+  const m = D.compare.month;
+  document.getElementById("yoyNote").textContent = `Year to date (Jan 1 – ${shortDate(D.today)}) and month to date, each against the same span before`;
+  document.getElementById("yoy").innerHTML = `<thead><tr><th></th><th class="num">This year</th><th class="num">Last year</th><th class="num">Change</th><th class="num">This month</th><th class="num">Last month</th><th class="num">Change</th></tr></thead><tbody>` +
+    rows.map(([k, label, d]) => `<tr><td>${label}</td><td class="num">${fmt(y.current[k], d)}</td><td class="num">${fmt(y.previous[k], d)}</td><td class="num">${delta(y.change_pct[k])}</td><td class="num">${fmt(m.current[k], d)}</td><td class="num">${fmt(m.previous[k], d)}</td><td class="num">${delta(m.change_pct[k])}</td></tr>`).join("") + "</tbody>";
+})();
+
+// ---------- Gym ----------
+function barsList(el, entries, unit) {
+  const max = Math.max(1, ...entries.map(e => e[1]));
+  el.innerHTML = entries.length ? entries.map(([k, v]) =>
+    `<div class="row"><span>${esc(k)}</span><div class="track"><div class="fill" style="width:${(v / max) * 100}%"></div></div><span class="num" style="text-align:right">${fmt(v)}${unit}</span></div>`).join("")
+    : `<div class="empty">No gym sets parsed yet.</div>`;
+}
+(function () {
+  const sets = Object.entries(D.weekly.sets_by_group).map(([g, arr]) => [g, arr.slice(-4).reduce((a, b) => a + b, 0)])
+    .filter(([g, v]) => v > 0 && g !== "Other").sort((a, b) => b[1] - a[1]);
+  barsList(document.getElementById("groupSets"), sets, "");
+  barsList(document.getElementById("groupDays"), Object.entries(D.days_since_group).sort((a, b) => b[1] - a[1]), "d");
+})();
+
+let sortKey = "sessions", sortDir = -1, selected = null;
+const exCols = [["exercise", "Exercise"], ["muscle_group", "Group"], ["sessions", "Sessions", 1], ["best_set", "Best set"],
+  ["best_e1rm", `Est. 1RM (${U.weight})`, 1], ["change_pct", "90-day", 1]];
+function renderExercises() {
+  const f = document.getElementById("exSearch").value.toLowerCase();
+  const rows = D.exercises.filter(e => e.exercise.toLowerCase().includes(f) || e.muscle_group.toLowerCase().includes(f))
+    .sort((a, b) => ((a[sortKey] ?? -1e9) > (b[sortKey] ?? -1e9) ? 1 : -1) * sortDir);
+  document.getElementById("exTable").innerHTML =
+    `<thead><tr>${exCols.map(([k, l, n]) => `<th class="${n ? "num" : ""}" data-k="${k}">${l}${k === sortKey ? (sortDir > 0 ? " ↑" : " ↓") : ""}</th>`).join("")}</tr></thead><tbody>` +
+    (rows.length ? rows.map(e => `<tr class="click ${e.exercise === selected ? "sel" : ""}" data-ex="${esc(e.exercise)}"><td>${esc(e.exercise)}</td><td>${e.muscle_group}</td><td class="num">${e.sessions}</td>
+      <td>${e.best_set ?? (e.best_duration_s ? e.best_duration_s + "s" : e.best_reps ? e.best_reps + " reps" : "–")}</td>
+      <td class="num">${fmt(e.best_e1rm)}</td><td class="num">${e.change_pct == null ? "–" : delta(e.change_pct)}</td></tr>`).join("")
+      : `<tr><td colspan="6" class="empty">No exercises</td></tr>`) + "</tbody>";
+}
+document.getElementById("exSearch").oninput = renderExercises;
+document.getElementById("exTable").onclick = e => {
+  const th = e.target.closest("th");
+  if (th) { sortDir = th.dataset.k === sortKey ? -sortDir : -1; sortKey = th.dataset.k; return renderExercises(); }
+  const tr = e.target.closest("tr[data-ex]");
+  if (tr) showExercise(tr.dataset.ex);
+};
+async function showExercise(name) {
+  selected = name; renderExercises();
+  const r = await fetch("api/exercise/" + encodeURIComponent(name)).then(r => r.json());
+  const h = r.history, weighted = h.length && h[0].e1rm != null;
+  document.getElementById("exTitle").textContent = name;
+  const first = h[0], last = h[h.length - 1];
+  document.getElementById("exNote").textContent = weighted
+    ? `Best estimated 1RM per session, ${r.unit} · ${h.length} sessions · ${fmt(first.e1rm)} → ${fmt(last.e1rm)} ${r.unit}`
+    : `${h[0]?.duration_s != null ? "Total seconds" : "Total reps"} per session · ${h.length} sessions`;
+  charts.ex?.destroy();
+  charts.ex = new Chart(document.getElementById("exChart"), {
+    type: "line",
+    data: { labels: h.map(x => x.day), datasets: [{ label: weighted ? "Est. 1RM" : "Total",
+      data: h.map(x => weighted ? x.e1rm : (x.duration_s ?? x.reps)), borderColor: css("--s1"), backgroundColor: css("--s1"),
+      borderWidth: 2, pointRadius: h.length > 60 ? 0 : 3, pointHoverRadius: 5, tension: 0.25 }] },
+    options: { interaction: { mode: "index", intersect: false },
+      scales: { ...axes(weighted ? r.unit : "", { beginAtZero: false }), x: { type: "category", grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 20, callback(v) { return shortDate(this.getLabelForValue(v)); } } } },
+      plugins: { tooltip: { callbacks: { title: i => shortDate(i[0].label),
+        label: i => weighted ? `Est. 1RM ${fmt(h[i.dataIndex].e1rm, 1)} ${r.unit} · top set ${h[i.dataIndex].top_set} · ${h[i.dataIndex].sets} sets` : `${i.formattedValue}` } } } },
+  });
+}
+renderExercises();
+const firstWeighted = [...D.exercises].filter(e => e.best_e1rm).sort((a, b) => b.sessions - a.sessions)[0];
+if (firstWeighted) showExercise(firstWeighted.exercise);
+
+document.getElementById("prTable").innerHTML = D.recent_prs.length
+  ? `<thead><tr><th>Date</th><th>Exercise</th><th class="num">Est. 1RM (${U.weight})</th><th class="num">Previous best</th><th class="num">Gain</th></tr></thead><tbody>` +
+    D.recent_prs.map(p => `<tr><td>${shortDate(p.day)}</td><td>${esc(p.exercise)}</td><td class="num">${fmt(p.e1rm, 1)}</td><td class="num">${fmt(p.previous, 1)}</td><td class="num">${delta(p.gain_pct)}</td></tr>`).join("") + "</tbody>"
+  : `<tbody><tr><td class="empty">No new PRs in the last 30 days. Time to push one set a little harder.</td></tr></tbody>`;
+
+// ---------- Running ----------
+(function () {
+  const r = D.runs;
+  if (!r.count) { document.getElementById("running").innerHTML = `<div class="card empty">No runs synced yet.</div>`; return; }
+  document.getElementById("runKpis").innerHTML = [
+    kpi("Runs", fmt(r.count), ""), kpi("Total distance", fmt(r.total_dist, 1), U.distance),
+    kpi("Longest run", fmt(r.longest.dist, 1), U.distance, `<span class="delta flat">${shortDate(r.longest.day)}</span>`),
+    kpi(`Fastest 5k+ pace`, pace(r.fastest_5k_plus?.pace_s), "/" + U.distance, r.fastest_5k_plus ? `<span class="delta flat">${fmt(r.fastest_5k_plus.dist, 1)} ${U.distance} on ${shortDate(r.fastest_5k_plus.day)}</span>` : ""),
+  ].join("");
+  const months = r.monthly.slice(-18);
+  document.getElementById("runDistNote").textContent = `Last ${months.length} months with runs, ${U.distance}`;
+  charts.runMonthly = new Chart(document.getElementById("runMonthly"), {
+    type: "bar", data: { labels: months.map(m => m.month), datasets: [{ data: months.map(m => m.dist), backgroundColor: css("--s1"), ...bar }] },
+    options: { scales: axes(U.distance), plugins: { tooltip: { callbacks: { label: i => `${i.formattedValue} ${U.distance} · ${months[i.dataIndex].runs} runs · avg ${pace(months[i.dataIndex].pace_s)}/${U.distance}` } } } },
+  });
+  const pts = r.runs;
+  charts.runPace = new Chart(document.getElementById("runPace"), {
+    type: "scatter",
+    data: { datasets: [{ data: pts.map(p => ({ x: new Date(p.day + "T00:00").getTime(), y: p.pace_s })),
+      backgroundColor: css("--s1"), borderColor: css("--surface"), borderWidth: 2, pointRadius: 5, pointHoverRadius: 7 }] },
+    options: { scales: {
+      x: { type: "linear", grid: { display: false }, ticks: { maxTicksLimit: 6, callback: v => new Date(v).toLocaleDateString(undefined, { month: "short", year: "2-digit" }) } },
+      y: { reverse: true, title: { display: true, text: "min/" + U.distance }, ticks: { callback: v => pace(v) } } },
+      plugins: { tooltip: { callbacks: { label: i => { const p = pts[i.dataIndex]; return `${shortDate(p.day)} · ${fmt(p.dist, 2)} ${U.distance} at ${pace(p.pace_s)}/${U.distance}${p.hr ? ` · ${Math.round(p.hr)} bpm` : ""}`; } } } } },
+  });
+})();
+
+// ---------- Hiking ----------
+(function () {
+  const h = D.hikes;
+  if (!h.count) { document.getElementById("hiking").innerHTML = `<div class="card empty">No hikes synced yet.</div>`; return; }
+  const best = [...h.yearly].sort((a, b) => b.elev - a.elev)[0];
+  document.getElementById("hikeKpis").innerHTML = [
+    kpi("Hikes", fmt(h.count), ""), kpi("Total distance", fmt(h.total_dist), U.distance),
+    kpi("Total climbed", fmt(h.total_elev), U.elevation), kpi("Biggest year", best.year, "", `<span class="delta flat">${fmt(best.elev)} ${U.elevation}</span>`),
+  ].join("");
+  document.getElementById("hikeNote").textContent = `${U.elevation} of elevation gain`;
+  charts.hikeYearly = new Chart(document.getElementById("hikeYearly"), {
+    type: "bar", data: { labels: h.yearly.map(x => x.year), datasets: [{ data: h.yearly.map(x => x.elev), backgroundColor: css("--s1"), ...bar }] },
+    options: { scales: axes(U.elevation), plugins: { tooltip: { callbacks: { label: i => { const x = h.yearly[i.dataIndex]; return `${fmt(x.elev)} ${U.elevation} · ${x.hikes} hikes · ${fmt(x.dist, 1)} ${U.distance} · ${fmt(x.hours, 1)} h`; } } } } },
+  });
+  document.getElementById("hikeTop").innerHTML = `<thead><tr><th>Date</th><th>Hike</th><th class="num">${U.distance}</th><th class="num">${U.elevation}</th></tr></thead><tbody>` +
+    h.biggest.map(x => `<tr><td>${x.day}</td><td>${esc(x.name)}</td><td class="num">${fmt(x.dist, 1)}</td><td class="num">${fmt(x.elev)}</td></tr>`).join("") + "</tbody>";
+})();
+</script>
+</body>
+</html>

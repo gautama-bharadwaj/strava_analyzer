@@ -15,6 +15,8 @@ class Settings:
     client_secret: str | None
     data_dir: Path
     auth_port: int
+    units: str = "imperial"
+    weekly_target: int = 3
 
     @property
     def db_path(self) -> Path:
@@ -42,4 +44,6 @@ def load_settings() -> Settings:
         client_secret=os.getenv("STRAVA_CLIENT_SECRET"),
         data_dir=data_dir,
         auth_port=int(os.getenv("STRAVADASH_AUTH_PORT", "8765")),
+        units=os.getenv("STRAVADASH_UNITS", "imperial").lower(),
+        weekly_target=int(os.getenv("STRAVADASH_WEEKLY_TARGET", "3")),
     )

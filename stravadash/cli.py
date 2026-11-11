@@ -12,6 +12,14 @@ from stravadash.sync import GYM_SPORT_TYPES, reparse, sync
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        return _main(argv)
+    except (auth.AuthError, KeyboardInterrupt) as e:
+        print(e or "Stopped.")
+        return 1
+
+
+def _main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="stravadash", description="Personal Strava + Hevy dashboard")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -29,6 +37,10 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("unparsed", help="show gym sessions whose description produced no sets")
 
+    p_serve = sub.add_parser("serve", help="open the dashboard at http://localhost:5000")
+    p_serve.add_argument("--port", type=int, default=5000)
+    p_serve.add_argument("--demo", action="store_true", help="use generated sample data instead of your own")
+
     args = parser.parse_args(argv)
     settings = load_settings()
 
@@ -36,6 +48,9 @@ def main(argv: list[str] | None = None) -> int:
         tokens = auth.authorize(settings, open_browser=not args.no_browser)
         print(f"Connected to Strava (athlete {tokens.get('athlete', {}).get('id', '?')}). Tokens saved to {settings.token_path}.")
         return 0
+
+    if args.command == "serve":
+        return _serve(settings, args.port, args.demo)
 
     store = Store(settings.db_path)
     try:
@@ -76,4 +91,22 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  {r['start_date_local'][:10]}  {r['name']}: {preview}")
     finally:
         store.close()
+    return 0
+
+
+def _serve(settings, port: int, demo: bool) -> int:
+    from stravadash.web import create_app
+
+    db_path = settings.db_path
+    if demo:
+        from stravadash.demo import populate
+
+        db_path = settings.data_dir / "demo.db"
+        db_path.unlink(missing_ok=True)
+        populate(Store(db_path))
+    elif not db_path.exists():
+        print("No data yet. Run `stravadash auth` and `stravadash sync` first, or try `stravadash serve --demo`.")
+        return 1
+    print(f"Dashboard running at http://localhost:{port}  (Ctrl+C to stop)")
+    create_app(db_path, units=settings.units, weekly_target=settings.weekly_target).run(port=port)
     return 0

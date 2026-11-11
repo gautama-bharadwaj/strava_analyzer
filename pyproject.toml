@@ -1,0 +1,25 @@
+[project]
+name = "stravadash"
+version = "0.1.0"
+description = "Personal dashboard for Strava runs, hikes and Hevy gym workouts"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.32",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+stravadash = "stravadash.cli:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["stravadash"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

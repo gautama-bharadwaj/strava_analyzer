@@ -5,6 +5,9 @@ strava_tokens.json
 .env.local
 .env.production
 
+# Local data (Strava database and tokens)
+data/
+
 # Generated data files
 strava_activities.json
 gym_workout_data.csv
@@ -20,7 +23,7 @@ gym_workout_data.csv
 *.gif
 *.bmp
 *.svg
-!icon.svg
+!stravadash/static/*.svg
 
 # Python cache and compiled files
 __pycache__/
@@ -96,3 +99,6 @@ logs/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Static export
+site/

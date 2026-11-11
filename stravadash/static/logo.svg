@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Training Dashboard">
+  <rect width="64" height="64" rx="15" fill="#2a78d6"/>
+  <!-- rising trend -->
+  <polyline points="12,34 24,25 34,30 50,15" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="41,14 51,14 51,24" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- dumbbell -->
+  <rect x="18" y="45.5" width="28" height="4" rx="2" fill="#fff"/>
+  <rect x="11" y="40" width="5.5" height="15" rx="2" fill="#fff"/>
+  <rect x="17.5" y="42.5" width="4" height="10" rx="1.5" fill="#fff"/>
+  <rect x="47.5" y="40" width="5.5" height="15" rx="2" fill="#fff"/>
+  <rect x="42.5" y="42.5" width="4" height="10" rx="1.5" fill="#fff"/>
+</svg>

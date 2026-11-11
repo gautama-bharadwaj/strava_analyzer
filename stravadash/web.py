@@ -7,7 +7,7 @@ import sqlite3
 from datetime import date
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, render_template
+from flask import Flask, abort, jsonify, render_template, request
 
 from stravadash import analysis
 
@@ -18,9 +18,14 @@ def create_app(db_path: Path, units: str = "imperial", weekly_target: int = 3, t
     def connect():
         return sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
 
+    def system() -> str:
+        """`?units=metric|imperial` overrides the configured default."""
+        choice = request.args.get("units", units)
+        return choice if choice in ("metric", "imperial") else units
+
     def build():
         with connect() as conn:
-            return analysis.build(conn, today=today, system=units, weekly_target=weekly_target)
+            return analysis.build(conn, today=today, system=system(), weekly_target=weekly_target)
 
     @app.get("/")
     def index():
@@ -38,7 +43,7 @@ def create_app(db_path: Path, units: str = "imperial", weekly_target: int = 3, t
             unit = analysis.detect_weight_unit(sets)
         if name not in set(sets["exercise"]):
             abort(404)
-        u = analysis.Units.for_system(units, unit)
+        u = analysis.Units.for_system(system(), unit)
         return jsonify({"exercise": name, "unit": u.weight, "history": analysis.exercise_history(sets, name, u)})
 
     return app

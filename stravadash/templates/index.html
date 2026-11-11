@@ -39,6 +39,10 @@ body { margin: 0; background: var(--bg); color: var(--text);
 header { padding: 20px 16px 0; max-width: 1180px; margin: 0 auto; }
 h1 { font-size: 22px; margin: 0; }
 .sub { color: var(--text-2); font-size: 13px; }
+.toprow { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { background: var(--surface); color: var(--text-2); border: 0; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--s1); color: #fff; font-weight: 600; }
 nav { display: flex; gap: 4px; margin-top: 14px; border-bottom: 1px solid var(--border); overflow-x: auto; }
 nav button { background: none; border: 0; padding: 10px 14px; font: inherit; color: var(--text-2); cursor: pointer;
   border-bottom: 2px solid transparent; }
@@ -87,7 +91,8 @@ input[type=search] { width: 100%; padding: 8px 10px; border: 1px solid var(--bor
 </head>
 <body>
 <header>
-  <h1>Training Dashboard</h1>
+  <div class="toprow"><h1>Training Dashboard</h1>
+    <div class="seg" role="group" aria-label="Distance units"><button data-u="imperial">mi</button><button data-u="metric">km</button></div></div>
   <div class="sub" id="subtitle"></div>
   <nav role="tablist">
     <button role="tab" data-tab="overview" aria-selected="true">Overview</button>
@@ -126,7 +131,7 @@ input[type=search] { width: 100%; padding: 8px 10px; border: 1px solid var(--bor
     <div class="grid kpis" id="runKpis"></div>
     <div class="grid two" style="margin-top:14px">
       <div class="card"><h2>Distance per month</h2><p class="note" id="runDistNote"></p><div class="chart"><canvas id="runMonthly"></canvas></div></div>
-      <div class="card"><h2>Pace per run</h2><p class="note">Lower is faster · runs over 1 mile/1.6 km</p><div class="chart"><canvas id="runPace"></canvas></div></div>
+      <div class="card"><h2>Pace per run</h2><p class="note">Lower is faster · runs over 1 mi / 1.6 km</p><div class="chart"><canvas id="runPace"></canvas></div></div>
     </div>
   </section>
 
@@ -156,6 +161,23 @@ function delta(p, invert = false) {
 const kpi = (label, value, unit, extra = "") =>
   `<div class="card kpi"><div class="label">${label}</div><div class="value">${value}${unit ? ` <small>${unit}</small>` : ""}</div>${extra}</div>`;
 
+// Units toggle: mi/ft <-> km/m, remembered per browser
+(function () {
+  const current = U.distance === "km" ? "metric" : "imperial";
+  let saved = null;
+  try { saved = localStorage.getItem("units"); } catch (e) {}
+  const params = new URLSearchParams(location.search);
+  if (!params.has("units") && saved && saved !== current) {
+    params.set("units", saved); location.replace("?" + params + location.hash); return;
+  }
+  document.querySelectorAll(".seg button").forEach(b => {
+    b.setAttribute("aria-pressed", b.dataset.u === current);
+    b.onclick = () => {
+      try { localStorage.setItem("units", b.dataset.u); } catch (e) {}
+      params.set("units", b.dataset.u); location.href = "?" + params + location.hash;
+    };
+  });
+})();
 document.getElementById("subtitle").textContent =
   `${fmt(D.totals.activities)} activities since ${D.totals.first_day ?? "–"} · updated ${D.today}`;
 
@@ -285,7 +307,7 @@ document.getElementById("exTable").onclick = e => {
 };
 async function showExercise(name) {
   selected = name; renderExercises();
-  const r = await fetch("api/exercise/" + encodeURIComponent(name)).then(r => r.json());
+  const r = await fetch("api/exercise/" + encodeURIComponent(name) + location.search).then(r => r.json());
   const h = r.history, weighted = h.length && h[0].e1rm != null;
   document.getElementById("exTitle").textContent = name;
   const first = h[0], last = h[h.length - 1];

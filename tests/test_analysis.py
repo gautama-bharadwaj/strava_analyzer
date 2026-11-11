@@ -67,3 +67,24 @@ def test_streaks(tmp_path):
 def test_empty_database(tmp_path):
     data = analysis.build(Store(tmp_path / "db.sqlite").conn, today=TODAY)
     assert data["exercises"] == [] and data["runs"] == {"count": 0}
+
+
+def test_metric_units(tmp_path):
+    store = Store(tmp_path / "db.sqlite")
+    with store.transaction():
+        store.upsert_summary({"id": 1, "name": "Run", "sport_type": "Run", "start_date": "2026-11-01T07:00:00Z",
+                              "start_date_local": "2026-11-01T07:00:00Z", "distance": 10000, "moving_time": 3000})
+    mi = analysis.build(store.conn, today=TODAY)["runs"]
+    km = analysis.build(store.conn, today=TODAY, system="metric")["runs"]
+    assert km["total_dist"] == 10.0 and mi["total_dist"] == 6.2
+    assert km["runs"][0]["pace_s"] == 300  # 5:00 /km
+
+
+def test_units_query_param(tmp_path):
+    from stravadash.web import create_app
+    db = tmp_path / "db.sqlite"
+    populate(Store(db), today=TODAY)
+    client = create_app(db, today=TODAY).test_client()
+    assert client.get("/api/summary?units=metric").get_json()["units"]["distance"] == "km"
+    assert client.get("/api/summary").get_json()["units"]["distance"] == "mi"
+    assert client.get("/?units=metric").status_code == 200

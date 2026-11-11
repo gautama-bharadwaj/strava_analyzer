@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Training Dashboard</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='chart.umd.js') }}"></script>
 <style>
 :root {
   color-scheme: light;
@@ -48,6 +48,8 @@ section.tab { display: none; } section.tab.active { display: block; }
 .grid { display: grid; gap: 14px; }
 .kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 .two { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+.wide-left { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+@media (max-width: 900px) { .wide-left { grid-template-columns: minmax(0, 1fr); } }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
 .card h2 { font-size: 15px; margin: 0 0 2px; }
 .card .note { color: var(--text-3); font-size: 12px; margin: 0 0 12px; }
@@ -111,8 +113,8 @@ input[type=search] { width: 100%; padding: 8px 10px; border: 1px solid var(--bor
       <div class="card"><h2>Working sets per muscle group</h2><p class="note">Last 4 weeks, warm-ups excluded</p><div class="bars" id="groupSets"></div></div>
       <div class="card"><h2>Days since you trained…</h2><p class="note">Longest gap first</p><div class="bars" id="groupDays"></div></div>
     </div>
-    <div class="grid two" style="margin-top:14px">
-      <div class="card"><h2>Exercises</h2><p class="note">Click a row to see its progress · est. 1RM uses the Epley formula</p>
+    <div class="grid wide-left" style="margin-top:14px">
+      <div class="card"><h2>Exercises</h2><p class="note">Click a row to see its progress · 1RM est. (in your lifting unit) uses the Epley formula</p>
         <input type="search" id="exSearch" placeholder="Filter exercises">
         <div class="scroll"><table id="exTable"></table></div></div>
       <div class="card"><h2 id="exTitle">Progress</h2><p class="note" id="exNote">Pick an exercise</p><div class="chart tall"><canvas id="exChart"></canvas></div></div>
@@ -165,7 +167,9 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   history.replaceState(null, "", "#" + b.dataset.tab);
   Object.values(charts).forEach(c => c.resize());
 });
-if (location.hash) document.querySelector(`nav button[data-tab="${location.hash.slice(1)}"]`)?.click();
+const openHash = () => location.hash && document.querySelector(`nav button[data-tab="${location.hash.slice(1)}"]`)?.click();
+window.addEventListener("hashchange", openHash);
+openHash();
 
 // Chart.js defaults
 Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
@@ -259,18 +263,18 @@ function barsList(el, entries, unit) {
 })();
 
 let sortKey = "sessions", sortDir = -1, selected = null;
-const exCols = [["exercise", "Exercise"], ["muscle_group", "Group"], ["sessions", "Sessions", 1], ["best_set", "Best set"],
-  ["best_e1rm", `Est. 1RM (${U.weight})`, 1], ["change_pct", "90-day", 1]];
+const exCols = [["exercise", "Exercise"], ["sessions", "Sessions", 1], ["best_set", "Best set"],
+  ["best_e1rm", `1RM est.`, 1], ["change_pct", "90 days", 1]];
 function renderExercises() {
   const f = document.getElementById("exSearch").value.toLowerCase();
   const rows = D.exercises.filter(e => e.exercise.toLowerCase().includes(f) || e.muscle_group.toLowerCase().includes(f))
     .sort((a, b) => ((a[sortKey] ?? -1e9) > (b[sortKey] ?? -1e9) ? 1 : -1) * sortDir);
   document.getElementById("exTable").innerHTML =
     `<thead><tr>${exCols.map(([k, l, n]) => `<th class="${n ? "num" : ""}" data-k="${k}">${l}${k === sortKey ? (sortDir > 0 ? " ↑" : " ↓") : ""}</th>`).join("")}</tr></thead><tbody>` +
-    (rows.length ? rows.map(e => `<tr class="click ${e.exercise === selected ? "sel" : ""}" data-ex="${esc(e.exercise)}"><td>${esc(e.exercise)}</td><td>${e.muscle_group}</td><td class="num">${e.sessions}</td>
+    (rows.length ? rows.map(e => `<tr class="click ${e.exercise === selected ? "sel" : ""}" data-ex="${esc(e.exercise)}"><td>${esc(e.exercise)}<div class="note" style="margin:0">${e.muscle_group}</div></td><td class="num">${e.sessions}</td>
       <td>${e.best_set ?? (e.best_duration_s ? e.best_duration_s + "s" : e.best_reps ? e.best_reps + " reps" : "–")}</td>
       <td class="num">${fmt(e.best_e1rm)}</td><td class="num">${e.change_pct == null ? "–" : delta(e.change_pct)}</td></tr>`).join("")
-      : `<tr><td colspan="6" class="empty">No exercises</td></tr>`) + "</tbody>";
+      : `<tr><td colspan="5" class="empty">No exercises</td></tr>`) + "</tbody>";
 }
 document.getElementById("exSearch").oninput = renderExercises;
 document.getElementById("exTable").onclick = e => {
@@ -295,7 +299,7 @@ async function showExercise(name) {
       data: h.map(x => weighted ? x.e1rm : (x.duration_s ?? x.reps)), borderColor: css("--s1"), backgroundColor: css("--s1"),
       borderWidth: 2, pointRadius: h.length > 60 ? 0 : 3, pointHoverRadius: 5, tension: 0.25 }] },
     options: { interaction: { mode: "index", intersect: false },
-      scales: { ...axes(weighted ? r.unit : "", { beginAtZero: false }), x: { type: "category", grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 20, callback(v) { return shortDate(this.getLabelForValue(v)); } } } },
+      scales: { ...axes(weighted ? r.unit : "", { beginAtZero: false }), x: { type: "category", grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 20, callback(v) { return new Date(this.getLabelForValue(v) + "T00:00").toLocaleDateString(undefined, { month: "short", year: "2-digit" }); } } } },
       plugins: { tooltip: { callbacks: { title: i => shortDate(i[0].label),
         label: i => weighted ? `Est. 1RM ${fmt(h[i.dataIndex].e1rm, 1)} ${r.unit} · top set ${h[i.dataIndex].top_set} · ${h[i.dataIndex].sets} sets` : `${i.formattedValue}` } } } },
   });
@@ -351,7 +355,7 @@ document.getElementById("prTable").innerHTML = D.recent_prs.length
     options: { scales: axes(U.elevation), plugins: { tooltip: { callbacks: { label: i => { const x = h.yearly[i.dataIndex]; return `${fmt(x.elev)} ${U.elevation} · ${x.hikes} hikes · ${fmt(x.dist, 1)} ${U.distance} · ${fmt(x.hours, 1)} h`; } } } } },
   });
   document.getElementById("hikeTop").innerHTML = `<thead><tr><th>Date</th><th>Hike</th><th class="num">${U.distance}</th><th class="num">${U.elevation}</th></tr></thead><tbody>` +
-    h.biggest.map(x => `<tr><td>${x.day}</td><td>${esc(x.name)}</td><td class="num">${fmt(x.dist, 1)}</td><td class="num">${fmt(x.elev)}</td></tr>`).join("") + "</tbody>";
+    h.biggest.map(x => `<tr><td>${new Date(x.day + "T00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</td><td>${esc(x.name)}</td><td class="num">${fmt(x.dist, 1)}</td><td class="num">${fmt(x.elev)}</td></tr>`).join("") + "</tbody>";
 })();
 </script>
 </body>

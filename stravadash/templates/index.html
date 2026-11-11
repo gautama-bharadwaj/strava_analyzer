@@ -99,6 +99,7 @@ input[type=search] { width: 100%; padding: 8px 10px; border: 1px solid var(--bor
     <button role="tab" data-tab="gym">Gym</button>
     <button role="tab" data-tab="running">Running</button>
     <button role="tab" data-tab="hiking">Hiking</button>
+    <button role="tab" data-tab="other">Other activities</button>
   </nav>
 </header>
 <main>
@@ -141,6 +142,14 @@ input[type=search] { width: 100%; padding: 8px 10px; border: 1px solid var(--bor
       <div class="card"><h2>Elevation climbed per year</h2><p class="note" id="hikeNote"></p><div class="chart"><canvas id="hikeYearly"></canvas></div></div>
       <div class="card"><h2>Biggest climbs</h2><p class="note">Top 5 hikes by elevation gain</p><div class="scroll"><table id="hikeTop"></table></div></div>
     </div>
+  </section>
+  <section class="tab" id="other">
+    <div class="grid kpis" id="otherKpis"></div>
+    <div class="grid two" style="margin-top:14px">
+      <div class="card"><h2>Time spent per activity</h2><p class="note">All-time hours moving</p><div class="bars" id="otherHours"></div></div>
+      <div class="card"><h2 id="sportTitle">Per year</h2><p class="note" id="sportNote"></p><div class="chart"><canvas id="sportYearly"></canvas></div></div>
+    </div>
+    <div class="card" style="margin-top:14px"><h2>Breakdown by activity</h2><p class="note">Click a row to see it year by year</p><div class="scroll"><table id="otherTable"></table></div></div>
   </section>
 </main>
 <div id="tip"></div>
@@ -378,6 +387,40 @@ document.getElementById("prTable").innerHTML = D.recent_prs.length
   });
   document.getElementById("hikeTop").innerHTML = `<thead><tr><th>Date</th><th>Hike</th><th class="num">${U.distance}</th><th class="num">${U.elevation}</th></tr></thead><tbody>` +
     h.biggest.map(x => `<tr><td>${new Date(x.day + "T00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</td><td>${esc(x.name)}</td><td class="num">${fmt(x.dist, 1)}</td><td class="num">${fmt(x.elev)}</td></tr>`).join("") + "</tbody>";
+})();
+
+// ---------- Other activities ----------
+(function () {
+  const o = D.other;
+  if (!o.count) { document.getElementById("other").innerHTML = `<div class="card empty">No other activities synced yet.</div>`; return; }
+  const top = o.sports[0];
+  document.getElementById("otherKpis").innerHTML = [
+    kpi("Activities", fmt(o.count), ""), kpi("Hours moving", fmt(o.hours, 1), "h"),
+    kpi("Different sports", o.sports.length, ""), kpi("Most frequent", esc(top.label), "", `<span class="delta flat">${top.count} sessions</span>`),
+  ].join("");
+  barsList(document.getElementById("otherHours"), o.sports.map(x => [x.label, x.hours]).sort((a, b) => b[1] - a[1]), "h");
+  let sel = top.sport_type;
+  const table = document.getElementById("otherTable");
+  const render = () => table.innerHTML =
+    `<thead><tr><th>Activity</th><th class="num">Sessions</th><th class="num">Hours</th><th class="num">${U.distance}</th><th class="num">Climb (${U.elevation})</th><th>Last</th></tr></thead><tbody>` +
+    o.sports.map(x => `<tr class="click ${x.sport_type === sel ? "sel" : ""}" data-s="${esc(x.sport_type)}"><td>${esc(x.label)}</td><td class="num">${x.count}</td><td class="num">${fmt(x.hours, 1)}</td>
+      <td class="num">${x.dist == null ? "–" : fmt(x.dist, 1)}</td><td class="num">${x.elev == null ? "–" : fmt(x.elev)}</td>
+      <td>${new Date(x.last + "T00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</td></tr>`).join("") + "</tbody>";
+  function show(type) {
+    sel = type; render();
+    const x = o.sports.find(s => s.sport_type === type);
+    document.getElementById("sportTitle").textContent = `${x.label} per year`;
+    const L = x.longest;
+    document.getElementById("sportNote").textContent = `Sessions per year · longest: ${L.name} on ${shortDate(L.day)}, ${fmt(L.hours, 1)} h${L.dist ? `, ${fmt(L.dist, 1)} ${U.distance}` : ""}`;
+    charts.sport?.destroy();
+    charts.sport = new Chart(document.getElementById("sportYearly"), {
+      type: "bar", data: { labels: x.yearly.map(y => y.year), datasets: [{ data: x.yearly.map(y => y.count), backgroundColor: css("--s1"), ...bar }] },
+      options: { scales: axes("sessions"), plugins: { tooltip: { callbacks: { label: i => { const y = x.yearly[i.dataIndex];
+        return `${y.count} sessions · ${fmt(y.hours, 1)} h${y.dist != null ? ` · ${fmt(y.dist, 1)} ${U.distance}` : ""}`; } } } } },
+    });
+  }
+  table.onclick = e => { const tr = e.target.closest("tr[data-s]"); if (tr) show(tr.dataset.s); };
+  show(sel);
 })();
 </script>
 </body>

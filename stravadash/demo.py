@@ -84,5 +84,19 @@ def populate(store: Store, today: date | None = None, seed: int = 7) -> int:
                                       "total_elevation_gain": km * rng.uniform(40, 110)})
                 aid += 1
                 n += 1
+            if rng.random() < 0.06:
+                sport, name, km, mins, climb = rng.choice([
+                    ("Ride", "Bay trail ride", rng.uniform(20, 60), rng.randint(60, 180), rng.uniform(100, 700)),
+                    ("Tennis", "Tennis", 0, rng.randint(60, 120), 0),
+                    ("Swim", "Pool swim", rng.uniform(1, 2), rng.randint(30, 50), 0),
+                    ("AlpineSki", "Tahoe", rng.uniform(20, 40), rng.randint(180, 300), 0),
+                    ("StandUpPaddling", "SUP", rng.uniform(3, 8), rng.randint(45, 90), 0),
+                ])
+                when = datetime.combine(d, datetime.min.time()).replace(hour=11)
+                store.upsert_summary({"id": aid, "name": name, "sport_type": sport, "start_date": when.isoformat() + "Z",
+                                      "start_date_local": when.isoformat() + "Z", "distance": km * 1000,
+                                      "moving_time": mins * 60, "elapsed_time": mins * 66, "total_elevation_gain": climb})
+                aid += 1
+                n += 1
             d += timedelta(days=1)
     return n

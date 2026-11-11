@@ -88,3 +88,12 @@ def test_units_query_param(tmp_path):
     assert client.get("/api/summary?units=metric").get_json()["units"]["distance"] == "km"
     assert client.get("/api/summary").get_json()["units"]["distance"] == "mi"
     assert client.get("/?units=metric").status_code == 200
+
+
+def test_other_sports(demo):
+    o = demo["other"]
+    labels = {s["label"] for s in o["sports"]}
+    assert {"Cycling", "Tennis"} <= labels
+    assert not labels & {"Running", "Run", "Hike", "Weight training"}
+    tennis = next(s for s in o["sports"] if s["label"] == "Tennis")
+    assert tennis["dist"] is None and tennis["count"] == sum(y["count"] for y in tennis["yearly"])

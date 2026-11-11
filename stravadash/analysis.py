@@ -292,6 +292,52 @@ def hike_stats(acts: pd.DataFrame, units: Units) -> dict:
     }
 
 
+# --- everything else ------------------------------------------------------------
+
+SPORT_NAMES = {"Ride": "Cycling", "VirtualRide": "Indoor cycling", "EBikeRide": "E-bike", "MountainBikeRide": "Mountain biking",
+               "AlpineSki": "Skiing", "BackcountrySki": "Backcountry skiing", "NordicSki": "Cross-country skiing",
+               "StandUpPaddling": "Stand-up paddling", "Swim": "Swimming", "Walk": "Walking", "Rowing": "Rowing",
+               "Kayaking": "Kayaking", "RockClimbing": "Climbing", "Snowboard": "Snowboarding", "Yoga": "Yoga"}
+MAIN_TYPES = GYM_TYPES | RUN_TYPES | {"Hike"}
+
+
+def sport_label(sport_type: str) -> str:
+    import re
+    return SPORT_NAMES.get(sport_type) or re.sub(r"(?<=[a-z])(?=[A-Z])", " ", sport_type or "Other").capitalize()
+
+
+def other_sports(acts: pd.DataFrame, units: Units) -> dict:
+    """Per-sport breakdown for everything that isn't gym, running or hiking."""
+    o = acts[~acts["sport_type"].isin(MAIN_TYPES)].copy()
+    if o.empty:
+        return {"count": 0, "sports": []}
+    o["dist"] = units.dist(o["distance_m"])
+    o["elev"] = units.elev(o["elevation_gain_m"])
+    o["hours"] = o["moving_time_s"] / 3600
+    o["year"] = o["date"].dt.year
+    sports = []
+    for sport, g in o.groupby("sport_type"):
+        longest = g.loc[g["hours"].idxmax()]
+        has_dist = bool((g["dist"] > 0.05).any())
+        sports.append({
+            "sport_type": sport,
+            "label": sport_label(sport),
+            "count": int(len(g)),
+            "hours": round(float(g["hours"].sum()), 1),
+            "dist": round(float(g["dist"].sum()), 1) if has_dist else None,
+            "elev": round(float(g["elev"].sum())) if g["elev"].sum() > 0 else None,
+            "first": str(g["day"].min()),
+            "last": str(g["day"].max()),
+            "longest": {"day": str(longest["day"]), "name": longest["name"], "hours": round(float(longest["hours"]), 1),
+                        "dist": round(float(longest["dist"]), 1) if has_dist else None},
+            "yearly": [{"year": int(y), "count": int(len(x)), "hours": round(float(x["hours"].sum()), 1),
+                        "dist": round(float(x["dist"].sum()), 1) if has_dist else None}
+                       for y, x in g.groupby("year")],
+        })
+    sports.sort(key=lambda x: (-x["count"], x["label"]))
+    return {"count": int(len(o)), "hours": round(float(o["hours"].sum()), 1), "sports": sports}
+
+
 # --- comparisons & highlights ------------------------------------------------------
 
 def period_totals(acts: pd.DataFrame, sets: pd.DataFrame, units: Units, start: date, end: date) -> dict:
@@ -382,6 +428,7 @@ def build(conn: sqlite3.Connection, today: date | None = None, system: str = "im
         "days_since_group": days_since_by_group(sets, today) if len(sets) else {},
         "runs": run_stats(acts, units, today),
         "hikes": hike_stats(acts, units),
+        "other": other_sports(acts, units),
         "compare": comparisons(acts, sets, units, today),
     }
     data["highlights"] = highlights(data, units)

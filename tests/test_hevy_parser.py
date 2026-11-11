@@ -97,3 +97,13 @@ def test_numbered_exercise_names_and_empty():
 def test_unknown_set_lines_are_skipped():
     assert parse_set_line("Set 1: something odd") is None
     assert parse_set_line("Settings changed") is None
+
+
+def test_quoted_exercise_notes_are_ignored():
+    desc = (
+        'Lat Pulldown (Cable)\n"Wide grip"\nSet 1: 120 lbs x 10\nSet 2: 130 lbs x 8\n\n'
+        'Bench Press (Dumbbell)\n"Changing weight to total weight (30lbs dumbell + 30lbs dumbell)"\nSet 1: 60 lbs x 10\n'
+    )
+    ex = parse_description(desc)
+    assert [e.name for e in ex] == ["Lat Pulldown (Cable)", "Bench Press (Dumbbell)"]
+    assert len(ex[0].sets) == 2 and ex[1].sets[0].weight == 60

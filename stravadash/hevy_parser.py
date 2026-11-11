@@ -147,7 +147,8 @@ def parse_description(description: str | None) -> list[ParsedExercise]:
     """Split a Hevy description into exercises with their sets.
 
     The exercise name is the last non-set line before a run of set lines,
-    which skips any free-text workout notes at the top.
+    which skips any free-text workout notes at the top. Quoted lines are
+    Hevy exercise notes and are ignored.
     """
     exercises: list[ParsedExercise] = []
     candidate: str | None = None
@@ -168,11 +169,16 @@ def parse_description(description: str | None) -> list[ParsedExercise]:
                 candidate = None
             current.sets.append(ps)
             continue
-        if NOISE.search(line):
+        if NOISE.search(line) or _is_note(line):
             continue
         current = None
         candidate = _clean_name(line)
     return [e for e in exercises if e.sets]
+
+
+def _is_note(line: str) -> bool:
+    """Hevy puts exercise notes on their own line in double quotes, between the name and the sets."""
+    return len(line) >= 2 and line[0] in "\"“" and line[-1] in "\"”"
 
 
 def _clean_name(line: str) -> str:

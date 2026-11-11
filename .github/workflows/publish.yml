@@ -2,7 +2,7 @@ name: Publish dashboard
 
 # Syncs new Strava activities and publishes the dashboard to GitHub Pages.
 # Needs repository secrets STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET,
-# STRAVA_REFRESH_TOKEN and DATA_KEY (see README, "Hosting").
+# STRAVA_REFRESH_TOKEN and DATA_KEY (see docs/publishing.md).
 
 on:
   schedule:

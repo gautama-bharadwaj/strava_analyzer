@@ -1,89 +1,129 @@
-# Strava Dashboard
+# Strava Training Dashboard
 
-A personal dashboard for everything you log on Strava: runs, hikes, and gym
-workouts that Hevy posts to Strava. Gym sets (exercise, weight, reps) are read
-from the text Hevy writes into each activity's description, so no Hevy Pro
-subscription is needed.
+A dashboard for everything you log on Strava: gym workouts, runs, hikes and
+every other sport. It shows what you've improved, your streaks and personal
+records, and what to train next.
 
+If you log your lifting in [Hevy](https://www.hevyapp.com/) and let it post
+workouts to Strava, every set (exercise, weight, reps) is read from the
+workout description. No Hevy Pro subscription is needed.
 
-## Setup
+![Overview tab](docs/overview.png)
 
-Requires Python 3.11+.
+## What you get
+
+- **Overview:** weekly gym goal and streak, wins and nudges ("New PR on Squat",
+  "9 days since you trained legs"), a year of active days, and this year vs
+  last year.
+- **Gym:** estimated one-rep max over time for every exercise, recent PRs,
+  working sets per muscle group, and days since each muscle group was trained.
+- **Running:** monthly distance, pace on every run, fastest 5k+ and longest run.
+- **Hiking:** elevation and distance per year, biggest climbs.
+- **Heart:** heartbeats per mile on runs (fewer beats for the same distance
+  means a fitter heart), heart rate trends, and weekly cardio minutes against
+  the 150-minute guideline.
+- **Other activities:** cycling, skiing, swimming, tennis and anything else,
+  broken down per sport.
+
+Switch between miles and kilometres in the top corner.
+
+| Gym | Heart |
+| --- | --- |
+| ![Gym tab](docs/gym.png) | ![Heart tab](docs/heart.png) |
+
+## Try it without an account
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e '.[dev]'
-cp .env.example .env   # then fill in your Strava client ID and secret
+python3 -m venv .venv && source .venv/bin/activate
+pip install .
+stravadash serve --demo
 ```
 
-On https://www.strava.com/settings/api set **Authorization Callback Domain**
-to `localhost`.
+Then open http://localhost:8050. The demo uses generated sample data.
 
-## Usage
+## Run it with your own Strava data
+
+You need Python 3.11 or newer and a Strava account.
+
+1. **Create a Strava API app** at https://www.strava.com/settings/api. Any name
+   and website will do. Set **Authorization Callback Domain** to `localhost`.
+2. **Install and add your keys:**
+   ```bash
+   git clone https://github.com/gautama-bharadwaj/strava_analyzer.git
+   cd strava_analyzer
+   python3 -m venv .venv && source .venv/bin/activate
+   pip install .
+   cp .env.example .env
+   ```
+   Put the app's Client ID and Client Secret into `.env`.
+3. **Connect your account and download your activities:**
+   ```bash
+   stravadash auth
+   stravadash sync
+   ```
+   `auth` opens Strava in your browser once. Tick "View data about your
+   private activities" so gym workouts can be read. The first `sync` can take
+   a while if you have many gym sessions: Strava allows about 100 requests
+   every 15 minutes, and the sync pauses and resumes on its own. Later syncs
+   only fetch what's new.
+4. **Open the dashboard:**
+   ```bash
+   stravadash serve
+   ```
+   and go to http://localhost:8050.
+
+Run `stravadash sync` whenever you want fresh data.
+
+Your data stays on your computer, in `data/` (ignored by git). GPS routes and
+coordinates are never saved.
+
+### Settings
+
+Optional lines in `.env`:
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `STRAVADASH_WEEKLY_TARGET` | `3` | Gym sessions per week you're aiming for |
+| `STRAVADASH_UNITS` | `imperial` | Default units, `imperial` or `metric` |
+
+### Other commands
 
 ```bash
-stravadash auth       # one time: opens Strava in your browser and saves tokens
-stravadash sync       # download activities (incremental after the first run)
-stravadash status     # counts by sport and parsed gym totals
-stravadash exercises  # parsed exercises, most frequent first
+stravadash status     # activities per sport and gym totals
+stravadash exercises  # exercises found in your Hevy workouts
 stravadash unparsed   # gym sessions where no sets could be read
-stravadash reparse    # re-run the Hevy parser on stored data, no API calls
-stravadash serve      # dashboard at http://localhost:8050 (add --demo for sample data)
-stravadash export     # static copy in ./site, activity names hidden (--private keeps them)
+stravadash reparse    # re-read stored workouts after a parser update
+stravadash export     # static copy of the dashboard in ./site
 ```
 
-(`python -m stravadash <command>` works too.)
+## How gym workouts are read
 
-Everything is stored locally in `data/strava.db` (SQLite) and
-`data/tokens.json`; both are git-ignored.
+Hevy writes each workout into the Strava description like this:
 
-### Strava rate limits
+```
+Bench Press (Barbell)
+Set 1: 135 lbs x 10 [Warm-up]
+Set 2: 185 lbs x 6
+Set 3: 165 lbs x 8 [Drop]
+```
 
-Strava allows 100 read requests per 15 minutes and 1,000 per day. Listing
-activities is cheap (200 per request), but each gym session needs one extra
-request to read its description. The first sync pauses automatically between
-15-minute windows; if it hits the daily cap it stops cleanly and the next
-`stravadash sync` picks up where it left off.
+The parser handles lb and kg, weighted and assisted bodyweight sets (`+25 lbs`,
+`-40 lbs`), timed and distance sets, and warm-up, drop and failure tags.
+Warm-ups are left out of PRs and volume. One-rep maxes are estimated with the
+Epley formula.
 
-## Hosting on GitHub Pages
-
-`.github/workflows/publish.yml` runs once a day (and on demand from the
-Actions tab): it syncs new activities and publishes the static dashboard.
-
-What gets published is only the exported page: stats, dates, distances,
-heart rate and exercise history. Activity titles are replaced with generic
-labels because they often name places. GPS routes and coordinates are
-dropped before anything is stored, and the database and Strava tokens never
-leave the encrypted Actions cache.
-
-One-time setup:
-
-1. **Repository secrets** (Settings → Secrets and variables → Actions):
-   - `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET`: from your `.env`
-   - `STRAVA_REFRESH_TOKEN`: run
-     `python3 -c "import json; print(json.load(open('data/tokens.json'))['refresh_token'])"`
-   - `DATA_KEY`: any long random string, e.g. the output of `openssl rand -base64 32`.
-     It encrypts the cached database; keep it secret.
-2. **Pages**: Settings → Pages → Build and deployment → Source: **GitHub Actions**.
-3. Optional: a repository *variable* `STRAVADASH_WEEKLY_TARGET` for your
-   weekly gym goal (default 3).
-4. Merge to `main`, then Actions → **Publish dashboard** → **Run workflow**.
-   The first run does a full sync and takes about an hour because of
-   Strava's rate limits; later runs take a minute or two.
-
-GitHub pauses scheduled workflows on public repos after 60 days without a
-commit; it emails you first and one click in the Actions tab re-enables it.
+If `stravadash unparsed` lists workouts that should have sets, please open an
+issue with an example description.
 
 ## Development
 
 ```bash
+pip install -e '.[dev]'
 pytest
 ```
 
-Layout:
-
-- `stravadash/auth.py` – OAuth login with a local callback, token refresh
-- `stravadash/client.py` – Strava API client that reads rate-limit headers
-- `stravadash/sync.py` – incremental sync into SQLite
-- `stravadash/hevy_parser.py` – parses Hevy's workout text into sets
-- `stravadash/store.py` – SQLite schema and queries
+- `stravadash/hevy_parser.py`: turns Hevy's text into sets
+- `stravadash/sync.py`, `client.py`, `auth.py`: Strava login and incremental sync into SQLite
+- `stravadash/analysis.py`: all the numbers the dashboard shows
+- `stravadash/web.py`, `templates/index.html`: the dashboard
+- `stravadash/export.py`: static export

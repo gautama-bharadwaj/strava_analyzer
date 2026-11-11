@@ -1,0 +1,100 @@
+name: Publish dashboard
+
+# Syncs new Strava activities and publishes the dashboard to GitHub Pages.
+# Needs repository secrets STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET,
+# STRAVA_REFRESH_TOKEN and DATA_KEY (see README, "Hosting").
+
+on:
+  schedule:
+    - cron: "17 13 * * *" # daily, about 5 AM Pacific (6 AM during daylight time)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: publish-dashboard
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120 # the very first sync waits out Strava's rate limits (~1 hour)
+    env:
+      TZ: America/Los_Angeles
+      STRAVADASH_DATA_DIR: data
+      STRAVADASH_WEEKLY_TARGET: ${{ vars.STRAVADASH_WEEKLY_TARGET || '3' }}
+      STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+      STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
+      STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
+      DATA_KEY: ${{ secrets.DATA_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install
+        run: pip install .
+
+      - name: Check secrets
+        run: |
+          for name in STRAVA_CLIENT_ID STRAVA_CLIENT_SECRET STRAVA_REFRESH_TOKEN DATA_KEY; do
+            if [ -z "${!name}" ]; then echo "::error::Missing repository secret $name"; exit 1; fi
+          done
+
+      # The database and Strava tokens carry over between runs in the Actions
+      # cache, encrypted with DATA_KEY. They are never committed or published.
+      - name: Restore data
+        uses: actions/cache/restore@v4
+        with:
+          path: data.enc
+          key: strava-data-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: strava-data-
+
+      - name: Decrypt data
+        run: |
+          mkdir -p data
+          if [ -f data.enc ]; then
+            openssl enc -d -aes-256-cbc -pbkdf2 -pass env:DATA_KEY -in data.enc | tar -xz -C data
+            echo "Restored previous data"
+          else
+            echo "No previous data: this run does a full sync"
+          fi
+
+      - name: Sync from Strava
+        run: stravadash sync
+
+      - name: Encrypt data
+        if: always() && hashFiles('data/strava.db') != ''
+        run: tar -cz -C data . | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:DATA_KEY -out data.enc
+
+      - name: Save data
+        if: always() && hashFiles('data.enc') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: data.enc
+          key: strava-data-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Build site
+        run: stravadash export --out site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

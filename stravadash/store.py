@@ -72,12 +72,33 @@ SUMMARY_FIELDS = {
 }
 
 
+# Fields that reveal where you were (GPS routes, coordinates, segments, photos)
+# are dropped before anything is stored, so the database never holds them.
+LOCATION_KEYS = ("map", "start_latlng", "end_latlng", "segment_efforts", "best_efforts", "splits_metric",
+                 "splits_standard", "laps", "photos", "location_city", "location_state", "location_country",
+                 "start_latitude", "start_longitude", "athlete", "similar_activities", "available_zones")
+
+
+def scrub(activity: dict) -> dict:
+    return {k: v for k, v in activity.items() if k not in LOCATION_KEYS}
+
+
 class Store:
     def __init__(self, path: Path | str):
         self.conn = sqlite3.connect(str(path))
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.executescript(SCHEMA)
+        self._scrub_existing()
+
+    def _scrub_existing(self) -> None:
+        """Remove location fields from rows saved before scrubbing existed."""
+        paths = ", ".join(f"'$.{k}'" for k in LOCATION_KEYS)
+        with self.conn:
+            self.conn.execute(
+                f"UPDATE activities SET summary_json = json_remove(summary_json, {paths}) "
+                "WHERE summary_json LIKE '%latlng%' OR summary_json LIKE '%\"map\"%'"
+            )
 
     def close(self) -> None:
         self.conn.close()
@@ -90,7 +111,7 @@ class Store:
     # --- activities -----------------------------------------------------
     def upsert_summary(self, a: dict) -> None:
         cols = ["id", *SUMMARY_FIELDS.values(), "summary_json"]
-        vals = [a["id"], *(a.get(k) for k in SUMMARY_FIELDS), json.dumps(a)]
+        vals = [a["id"], *(a.get(k) for k in SUMMARY_FIELDS), json.dumps(scrub(a))]
         if vals[cols.index("sport_type")] is None:
             vals[cols.index("sport_type")] = a.get("type")
         updates = ", ".join(f"{c}=excluded.{c}" for c in cols[1:])

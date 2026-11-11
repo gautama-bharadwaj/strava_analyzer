@@ -37,6 +37,11 @@ def _main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("unparsed", help="show gym sessions whose description produced no sets")
 
+    p_exp = sub.add_parser("export", help="write a static copy of the dashboard for hosting")
+    p_exp.add_argument("--out", default="site", help="output folder (default: site)")
+    p_exp.add_argument("--private", action="store_true", help="keep activity names (default hides them)")
+    p_exp.add_argument("--demo", action="store_true", help="export generated sample data instead of yours")
+
     p_serve = sub.add_parser("serve", help="open the dashboard at http://localhost:8050")
     p_serve.add_argument("--port", type=int, default=8050)  # 5000 is taken by AirPlay on macOS
     p_serve.add_argument("--demo", action="store_true", help="use generated sample data instead of your own")
@@ -51,6 +56,8 @@ def _main(argv: list[str] | None = None) -> int:
 
     if args.command == "serve":
         return _serve(settings, args.port, args.demo)
+    if args.command == "export":
+        return _export(settings, args)
 
     store = Store(settings.db_path)
     try:
@@ -109,4 +116,24 @@ def _serve(settings, port: int, demo: bool) -> int:
         return 1
     print(f"Dashboard running at http://localhost:{port}  (Ctrl+C to stop)")
     create_app(db_path, units=settings.units, weekly_target=settings.weekly_target).run(port=port)
+    return 0
+
+
+def _export(settings, args) -> int:
+    from pathlib import Path
+
+    from stravadash.export import export_site
+
+    db_path = settings.db_path
+    if args.demo:
+        from stravadash.demo import populate
+
+        db_path = settings.data_dir / "demo.db"
+        db_path.unlink(missing_ok=True)
+        populate(Store(db_path))
+    elif not db_path.exists():
+        print("No data yet. Run `stravadash sync` first.")
+        return 1
+    index = export_site(db_path, Path(args.out), public=not args.private, weekly_target=settings.weekly_target)
+    print(f"Wrote {index} ({index.stat().st_size // 1024} KB). Open it in a browser or publish the folder.")
     return 0

@@ -9,6 +9,7 @@ https://www.strava.com/settings/api.
 from __future__ import annotations
 
 import json
+import os
 import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -122,6 +123,9 @@ def authorize(settings: Settings, open_browser: bool = True) -> dict:
 
 def get_access_token(settings: Settings) -> str:
     tokens = _load(settings)
+    if not tokens and os.getenv("STRAVA_REFRESH_TOKEN"):
+        # CI: no token file yet, so start from the refresh token stored as a secret.
+        tokens = {"refresh_token": os.environ["STRAVA_REFRESH_TOKEN"], "expires_at": 0}
     if not tokens:
         raise AuthError("Not connected to Strava yet. Run: python -m stravadash auth")
     if tokens["expires_at"] - 60 < time.time():

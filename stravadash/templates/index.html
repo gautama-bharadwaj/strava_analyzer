@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Training Dashboard</title>
-<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='logo.svg') }}">
-<script src="{{ url_for('static', filename='chart.umd.js') }}"></script>
+<link rel="icon" type="image/svg+xml" href="static/logo.svg">
+<script src="static/chart.umd.js"></script>
 <style>
 :root {
   color-scheme: light;
@@ -93,7 +93,7 @@ input[type=search] { width: 100%; padding: 8px 10px; border: 1px solid var(--bor
 </head>
 <body>
 <header>
-  <div class="toprow"><h1 class="brand"><img src="{{ url_for('static', filename='logo.svg') }}" alt="" width="32" height="32">Training Dashboard</h1>
+  <div class="toprow"><h1 class="brand"><img src="static/logo.svg" alt="" width="32" height="32">Training Dashboard</h1>
     <div class="seg" role="group" aria-label="Distance units"><button data-u="imperial">mi</button><button data-u="metric">km</button></div></div>
   <div class="sub" id="subtitle"></div>
   <nav role="tablist">
@@ -169,7 +169,15 @@ input[type=search] { width: 100%; padding: 8px 10px; border: 1px solid var(--bor
 </main>
 <div id="tip"></div>
 <script>
-const D = {{ data_json | safe }};
+// Served by `stravadash serve`, DATA is one dataset and exercise history comes from the API.
+// A static export (`stravadash export`) embeds both unit systems plus every exercise history.
+const DATA = {{ data_json | safe }};
+const STATIC = !!DATA.static;
+const D = STATIC ? (() => {
+  let u = new URLSearchParams(location.search).get("units");
+  if (!u) { try { u = localStorage.getItem("units"); } catch (e) {} }
+  return DATA[u === "metric" ? "metric" : "imperial"];
+})() : DATA;
 const U = D.units;
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fmt = (n, d = 0) => n == null ? "–" : Number(n).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: 0 });
@@ -203,7 +211,7 @@ const kpi = (label, value, unit, extra = "") =>
   });
 })();
 document.getElementById("subtitle").textContent =
-  `${fmt(D.totals.activities)} activities since ${D.totals.first_day ?? "–"} · updated ${D.today}`;
+  `${fmt(D.totals.activities)} activities since ${D.totals.first_day ?? "–"} · updated ${D.today}${D.public ? " · activity names hidden" : ""}`;
 
 // Tabs
 const charts = {};
@@ -331,7 +339,8 @@ document.getElementById("exTable").onclick = e => {
 };
 async function showExercise(name) {
   selected = name; renderExercises();
-  const r = await fetch("api/exercise/" + encodeURIComponent(name) + location.search).then(r => r.json());
+  const r = STATIC ? { unit: U.weight, history: D.histories[name] || [] }
+    : await fetch("api/exercise/" + encodeURIComponent(name) + location.search).then(r => r.json());
   const h = r.history, weighted = h.length && h[0].e1rm != null;
   document.getElementById("exTitle").textContent = name;
   const first = h[0], last = h[h.length - 1];
